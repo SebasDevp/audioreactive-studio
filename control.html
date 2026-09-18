@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AudioReactive Studio · Control v0.7</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body class="control-body">
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand-wrap">
+          <div class="brand-mark"><span></span><span></span><span></span></div>
+          <div>
+            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.7</span></div>
+            <h1>AudioReactive <strong>Studio</strong></h1>
+          </div>
+        </div>
+        <div class="status-wrap">
+          <span id="audioStatus" class="status-dot"></span>
+          <div>
+            <div id="statusText" class="status-title">Audio desconectado</div>
+            <div id="statusDetail" class="status-detail">Elegí una entrada, ventana o el audio del sistema.</div>
+          </div>
+        </div>
+      </header>
+
+      <section class="workspace">
+        <aside class="panel controls-panel">
+          <section class="control-section first">
+            <div class="section-heading">
+              <div><span class="section-index">01</span><span class="section-title">AUDIO SOURCE</span></div>
+              <button id="stopAudio" class="tiny-btn">STOP</button>
+            </div>
+
+            <div class="source-card">
+              <div class="source-title-row">
+                <div class="source-icon">MIC</div>
+                <div><strong>Mic / entrada física</strong><small>Micrófono, interfaz o cable virtual</small></div>
+              </div>
+              <label for="audioInput">Dispositivo</label>
+              <div class="row">
+                <select id="audioInput"></select>
+                <button id="refreshAudio" class="icon-btn" title="Actualizar entradas">↻</button>
+              </div>
+              <button id="startInput" class="primary wide">Conectar entrada</button>
+            </div>
+
+            <div class="source-card accent-card">
+              <div class="source-title-row">
+                <div class="source-icon neon">APP</div>
+                <div><strong>Aplicación / ventana</strong><small>Chrome, Rekordbox, navegador, etc.</small></div>
+              </div>
+              <div id="captureThumb" class="capture-thumb">
+                <div class="capture-placeholder">Seleccioná una ventana</div>
+              </div>
+              <label for="captureSource">Ventana a capturar</label>
+              <div class="row">
+                <select id="captureSource"></select>
+                <button id="refreshCapture" class="icon-btn" title="Actualizar ventanas">↻</button>
+              </div>
+              <button id="captureWindow" class="primary wide">Escuchar ventana</button>
+              <p class="micro-note">La arquitectura quedó lista para seguir avanzando hacia captura por proceso. Por ahora seguimos usando loopback del sistema con selección de ventana como workflow principal.</p>
+            </div>
+
+            <button id="captureSystem" class="secondary wide system-btn"><span>◉</span> Capturar audio completo del sistema</button>
+
+            <div class="slider-control gain-control">
+              <label><span>Sensibilidad de entrada</span><b id="inputGainValue">2.00×</b></label>
+              <input id="inputGain" type="range" min="0.5" max="8" value="2" step="0.05" />
+            </div>
+
+            <div class="meter-block">
+              <div class="meter-label master"><span>LEVEL</span><span id="levelText">0.00</span></div>
+              <div class="meter master"><i id="levelMeter"></i></div>
+              <div class="meter-label"><span>BASS</span><span id="bassText">0.00</span></div>
+              <div class="meter"><i id="bassMeter"></i></div>
+              <div class="meter-label"><span>MID</span><span id="midText">0.00</span></div>
+              <div class="meter"><i id="midMeter"></i></div>
+              <div class="meter-label"><span>TREBLE</span><span id="trebleText">0.00</span></div>
+              <div class="meter"><i id="trebleMeter"></i></div>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <div class="section-heading"><div><span class="section-index">02</span><span class="section-title">VISUAL ENGINE</span></div></div>
+            <label>Plantilla</label>
+            <select id="preset" class="visual-select">
+              <option value="0">Cosmic Particles</option>
+              <option value="1">Neon Flow</option>
+              <option value="2">Sacred Dust</option>
+              <option value="3">Angelic Particles</option>
+              <option value="4">Techno Tunnel</option>
+              <option value="5">Quantum Dust</option>
+              <option value="6">Fibonacci Bloom</option>
+              <option value="7">Rune Pulse · Vegvísir</option>
+              <option value="8">Symbol Forge</option>
+              <option value="9">Seed World</option>
+              <option value="10">Flower of Life Nexus</option>
+              <option value="11">Artifact Shrine</option>
+              <option value="12">Entity Gate</option>
+              <option value="13">Dynamic Panels</option>
+              <option value="14">Matrix Lattice</option>
+              <option value="15">Merkaba Prism</option>
+            </select>
+
+            <div class="slider-control"><label><span>Intensidad</span><b id="intensityValue">1.06</b></label><input id="intensity" type="range" min="0" max="2.5" value="1.06" step="0.01" /></div>
+            <div class="slider-control"><label><span>Contraste</span><b id="contrastValue">1.08</b></label><input id="contrast" type="range" min="0.65" max="2" value="1.08" step="0.01" /></div>
+            <div class="slider-control"><label><span>Velocidad</span><b id="speedValue">0.88</b></label><input id="speed" type="range" min="0.08" max="3" value="0.88" step="0.01" /></div>
+            <div class="slider-control"><label><span>Zoom</span><b id="zoomValue">1.00</b></label><input id="zoom" type="range" min="0.35" max="2.5" value="1" step="0.01" /></div>
+            <div class="slider-control"><label><span>Partículas / densidad</span><b id="densityValue">1.28</b></label><input id="density" type="range" min="0.2" max="3" value="1.28" step="0.01" /></div>
+            <div class="slider-control"><label><span>Bloom / glow</span><b id="bloomValue">0.88</b></label><input id="bloom" type="range" min="0" max="2.2" value="0.88" step="0.01" /></div>
+
+            <div class="colors-row">
+              <div><label>Color A</label><input id="colorA" type="color" value="#6c4cff" /></div>
+              <div><label>Color B</label><input id="colorB" type="color" value="#00d9ff" /></div>
+            </div>
+            <div class="slider-control"><label><span>Fusión de color</span><b id="colorMixValue">0.50</b></label><input id="colorMix" type="range" min="0" max="1" value="0.50" step="0.01" /></div>
+
+            <label class="quality-label">Calidad de render</label>
+            <select id="quality">
+              <option value="performance">Performance</option>
+              <option value="high" selected>HD / Nativa</option>
+              <option value="ultra">Ultra / Supersampling</option>
+            </select>
+          </section>
+
+          <section class="control-section">
+            <div class="section-heading"><div><span class="section-index">03</span><span class="section-title">LOGO / ARTEFACTOS</span></div></div>
+            <div class="source-card accent-card">
+              <div class="source-title-row">
+                <div class="source-icon neon">LOGO</div>
+                <div><strong>Logo vivo</strong><small>Overlay dinámico, editable y multiplicable</small></div>
+              </div>
+              <label for="logoFile">Cargar logo</label>
+              <input id="logoFile" class="file-input" type="file" accept=".png,.svg,.webp,.jpg,.jpeg" />
+              <div class="button-grid">
+                <button id="logoToggle" class="primary">Logo: OFF</button>
+                <button id="clearLogo">Borrar logo</button>
+              </div>
+
+              <div class="slider-control"><label><span>Tamaño del logo</span><b id="logoSizeValue">0.28</b></label><input id="logoSize" type="range" min="0.10" max="0.65" value="0.28" step="0.01" /></div>
+              <div class="slider-control"><label><span>Opacidad del logo</span><b id="logoOpacityValue">0.85</b></label><input id="logoOpacity" type="range" min="0.05" max="1" value="0.85" step="0.01" /></div>
+              <div class="slider-control"><label><span>Cantidad / copias</span><b id="logoCopiesValue">1</b></label><input id="logoCopies" type="range" min="1" max="12" value="1" step="1" /></div>
+
+              <div class="checkbox-grid">
+                <label class="check-pill"><input id="logoFxBlink" type="checkbox" /> <span>Titilar</span></label>
+                <label class="check-pill"><input id="logoFxPulse" type="checkbox" /> <span>Agrandar / achicar</span></label>
+                <label class="check-pill"><input id="logoFxSpin" type="checkbox" /> <span>Giro suave</span></label>
+                <label class="check-pill"><input id="logoFxColor" type="checkbox" /> <span>Cambio de color</span></label>
+              </div>
+
+              <label class="quality-label">Modo del logo</label>
+              <select id="logoMode">
+                <option value="single">Single</option>
+                <option value="ring">Ring</option>
+                <option value="line">Line</option>
+                <option value="mirror">Mirror</option>
+                <option value="stack">Stack</option>
+              </select>
+
+              <div class="slider-control"><label><span>Separación / spread</span><b id="logoSpreadValue">0.18</b></label><input id="logoSpread" type="range" min="0" max="1" value="0.18" step="0.01" /></div>
+              <div class="slider-control"><label><span>Posición X</span><b id="logoPosXValue">0.00</b></label><input id="logoPosX" type="range" min="-1" max="1" value="0" step="0.01" /></div>
+              <div class="slider-control"><label><span>Posición Y</span><b id="logoPosYValue">0.00</b></label><input id="logoPosY" type="range" min="-1" max="1" value="0" step="0.01" /></div>
+              <div class="slider-control"><label><span>Rotación / drift</span><b id="logoRotationValue">0.35</b></label><input id="logoRotation" type="range" min="0" max="2" value="0.35" step="0.01" /></div>
+              <p id="logoHint" class="micro-note">Cargá un PNG/SVG/WebP/JPG y lo integraremos como overlay vivo sobre todas las visuales.</p>
+            </div>
+          </section>
+
+          <section class="control-section output-section">
+            <div class="section-heading"><div><span class="section-index">04</span><span class="section-title">OUTPUT</span></div></div>
+            <label>Pantalla / proyector / TV</label>
+            <select id="displaySelect"></select>
+            <div class="button-grid">
+              <button id="openOutput" class="primary">GO FULLSCREEN</button>
+              <button id="closeOutput">Cerrar salida</button>
+            </div>
+          </section>
+        </aside>
+
+        <section class="stage-panel">
+          <div class="preview-head">
+            <div class="preview-title">
+              <span class="live-chip"><i></i> LIVE PREVIEW</span>
+              <span id="beatBadge" class="beat-badge">BEAT</span>
+            </div>
+            <div class="preview-meta"><span>WEBGL 2 + BLOOM</span><span>GENERATIVE ENGINE</span><span id="qualityBadge">HD</span></div>
+          </div>
+
+          <div class="stage-wrap">
+            <div id="preview" class="preview"></div>
+            <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+          </div>
+
+          <div class="bottom-deck">
+            <div class="deck-card">
+              <span class="deck-label">AUDIO REACTION</span>
+              <strong id="reactionLabel">WAITING FOR SIGNAL</strong>
+            </div>
+            <div class="deck-card grow">
+              <span class="deck-label">QUICK PRESETS</span>
+              <div class="preset-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd><kbd>0</kbd><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd></div>
+            </div>
+            <div class="deck-card right">
+              <span class="deck-label">WORLD STATES</span>
+              <strong>GEOMETRY · ARTIFACTS · PANELS</strong>
+            </div>
+          </div>
+          <div class="hint">Ahora la estética suma una lectura más musical y orgánica: Vegvísir interactivo, Matrix Lattice, Merkaba Prism y transiciones de color más finas. Con zoom in / zoom out vas a ir descubriendo mundos, microdetalles y artefactos dentro de cada preset.</div>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="/src/control.js"></script>
+  </body>
+</html>
