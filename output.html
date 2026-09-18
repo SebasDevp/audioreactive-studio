@@ -4,16 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AudioReactive Studio · Output</title>
-    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="./src/styles.css" />
     <style>
-      html,body,#output{margin:0;width:100%;height:100%;overflow:hidden;background:#000;cursor:none}
+      html,body,#output{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
       body:before{display:none}
       #output{position:relative}
       canvas{display:block;width:100%;height:100%}
+      #webFullscreen{position:fixed;z-index:9999;right:18px;top:18px;min-height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(8,10,15,.72);color:#fff;font:600 12px/1 system-ui;backdrop-filter:blur(12px);cursor:pointer;opacity:.72;transition:.18s}
+      #webFullscreen:hover{opacity:1}
+      .is-fullscreen #webFullscreen{opacity:.16}
+      .is-fullscreen #webFullscreen:hover{opacity:.9}
     </style>
   </head>
   <body>
     <div id="output"></div>
-    <script type="module" src="/src/output.js"></script>
+    <button id="webFullscreen" hidden>Entrar en fullscreen</button>
+    <script type="module" src="./src/output.js"></script>
   </body>
 </html>

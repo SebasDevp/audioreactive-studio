@@ -1,83 +1,112 @@
-# AudioReactive Studio v0.7
+# AudioReactive Studio v0.8 · Desktop + Web
 
-Versión de corrección y pulido general del motor visual.
+AudioReactive Studio ahora puede ejecutarse de dos maneras desde el mismo proyecto:
 
-## Corrección principal: preview negro
-La v0.6 tenía un error en el shader de las nuevas escenas Matrix/Merkaba: parte del código visual había quedado en el shader equivocado y `triOutline` no estaba definido en el fragment shader. Eso podía hacer fallar la compilación completa del material y dejar el preview negro aunque el audio siguiera entrando.
+- **Desktop / Electron**: mantiene la experiencia actual, selección de pantallas y workflow de escritorio.
+- **Web / Browser**: abre el estudio directamente desde Chrome/Edge, captura una pestaña/ventana/pantalla mediante el selector seguro del navegador y permite abrir una ventana OUTPUT independiente.
 
-En v0.7:
-- shader corregido
-- Matrix y Merkaba dentro del fragment shader correcto
-- `triOutline` agregado correctamente
-- diagnóstico visible si en el futuro un shader vuelve a fallar
-
-## Vegvísir
-- usa la imagen exacta incluida en `src/assets/vegvisir.png`
-- gira de forma continua y suave
-- bajos: respiración / escala
-- medios: velocidad de giro
-- agudos: aura / eco / excitación de color
-- beat: expansión y presencia
-- silencios: la presencia cae de forma natural
-- segunda copia fantasma muy sutil para dar profundidad sin reemplazar el símbolo original
-
-## Logo
-- giro corregido: al activar el checkbox comienza desde su posición actual, sin salto
-- cambio de color reforzado
-- duplicación y separación reparadas
-- corregido el tamaño duplicado que antes se aplicaba dos veces
-- modos ring / line / mirror / stack más estables
-
-## Visuales
-- transiciones de velocidad suavizadas
-- cambios internos de patrón disparados por beats
-- bajo = expansión / escala
-- medios = torsión / rotación / mutación
-- agudos = partículas / detalle / color
-- volumen = presencia general
-- mayor respeto por silencios
-- tone mapping más suave para evitar blancos quemados
-- bloom más controlado
-
-## Color
-Se mantiene la barra **Fusión de color** para recorrer y fusionar Color A y Color B. Ahora también participa de forma más estable en Matrix, Merkaba y los cambios generativos.
-
-## Nuevos presets de la rama v0.6/v0.7
-- Matrix Lattice
-- Merkaba Prism
-
-## Presets actuales
-1. Cosmic Particles
-2. Neon Flow
-3. Sacred Dust
-4. Angelic Particles
-5. Techno Tunnel
-6. Quantum Dust
-7. Fibonacci Bloom
-8. Rune Pulse · Vegvísir
-9. Symbol Forge
-10. Seed World
-11. Flower of Life Nexus
-12. Artifact Shrine
-13. Entity Gate
-14. Dynamic Panels
-15. Matrix Lattice
-16. Merkaba Prism
-
-## Atajos
-- `1` a `0` → presets 1 al 10
-- `Q W E R T Y` → presets 11 al 16
-
-## Cómo actualizar
-1. Cerrá AudioReactive Studio.
-2. En la terminal hacé `Ctrl + C`.
-3. Descomprimí `audioreactive-studio-v0.7.zip`.
-4. Abrí la carpeta `audioreactive-studio-v0.7`.
-5. Copiá todo su contenido sobre tu carpeta actual `audioreactive-studio`.
-6. Elegí **Reemplazar archivos en el destino**.
-7. No borres `node_modules`.
-8. Ejecutá:
+## Ejecutar Desktop
 
 ```bash
 npm run dev
 ```
+
+## Ejecutar Web en desarrollo
+
+```bash
+npm run dev:web
+```
+
+Después abrir:
+
+```text
+http://localhost:5173
+```
+
+`index.html` redirige automáticamente a `control.html`.
+
+## Capturar YouTube en Web
+
+1. Tocá **Elegir fuente + audio**.
+2. En Chrome/Edge elegí **Pestaña**.
+3. Seleccioná la pestaña donde está YouTube.
+4. Activá **Compartir audio**.
+5. Reproducí música.
+
+Los medidores LEVEL / BASS / MID / TREBLE deberían comenzar a reaccionar y alimentar el motor visual.
+
+Para intentar capturar audio general del equipo, usá **Elegir pantalla / audio del sistema** y seleccioná la opción de audio que ofrezca el navegador/SO.
+
+## OUTPUT en Web
+
+El botón de OUTPUT abre `output.html` en una segunda ventana. CONTROL y OUTPUT se sincronizan mediante `BroadcastChannel`.
+
+En la ventana OUTPUT aparece el botón **Entrar en fullscreen**. Llevá esa ventana al proyector/TV y activá fullscreen allí.
+
+## Build Web
+
+```bash
+npm run build:web
+```
+
+Vite genera:
+
+```text
+dist/
+```
+
+Esa carpeta es la versión estática que puede publicar Cloudflare Pages.
+
+## Cloudflare Pages
+
+Configuración de build:
+
+```text
+Framework preset: Vite
+Build command: npm run build:web
+Build output directory: dist
+```
+
+Node recomendado: 22.
+
+## GitHub workflow
+
+Cuando reemplaces la versión anterior por esta:
+
+```bash
+git add .
+git commit -m "AudioReactive Studio v0.8 web mode"
+git push
+```
+
+Después Cloudflare Pages puede conectarse al repositorio y desplegar automáticamente cada nuevo push.
+
+## Diferencias Web vs Desktop
+
+### Desktop
+- Electron controla la ventana OUTPUT.
+- Puede enumerar pantallas/ventanas mediante APIs de Electron.
+- Es la base ideal para futuras integraciones nativas (por ejemplo WASAPI por proceso).
+
+### Web
+- Por privacidad del navegador no puede enumerar silenciosamente Chrome/Rekordbox/otras apps.
+- Al capturar, Chrome/Edge muestra su selector oficial y el usuario elige la pestaña, ventana o pantalla.
+- Micrófono y captura requieren contexto seguro: `https://` en producción o `localhost` durante desarrollo.
+
+## Arquitectura v0.8
+
+```text
+src/
+├── audio-engine.js
+├── visual-engine.js
+├── platform-bridge.js   ← detecta Desktop vs Web
+├── control.js
+├── output.js
+└── assets/
+
+Electron ─┐
+          ├── mismo motor visual/audio
+Browser ──┘
+```
+
+El objetivo es que los próximos presets y mejoras se programen una sola vez y funcionen tanto en Desktop como en Web.

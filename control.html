@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AudioReactive Studio · Control v0.7</title>
-    <link rel="stylesheet" href="/src/styles.css" />
+    <title>AudioReactive Studio · Control v0.8</title>
+    <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body class="control-body">
     <main class="app-shell">
@@ -12,7 +12,7 @@
         <div class="brand-wrap">
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.7</span></div>
+            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.8</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
             <h1>AudioReactive <strong>Studio</strong></h1>
           </div>
         </div>
@@ -24,6 +24,10 @@
           </div>
         </div>
       </header>
+
+      <div id="webModeNote" class="web-mode-note" hidden>
+        <strong>WEB MODE</strong> · Para capturar YouTube en Chrome/Edge, elegí <b>Pestaña</b> y activá <b>Compartir audio</b>. Para una pantalla completa, activá el audio del sistema cuando el navegador lo ofrezca.
+      </div>
 
       <section class="workspace">
         <aside class="panel controls-panel">
@@ -210,6 +214,6 @@
         </section>
       </section>
     </main>
-    <script type="module" src="/src/control.js"></script>
+    <script type="module" src="./src/control.js"></script>
   </body>
 </html>

@@ -1,5 +1,6 @@
 import { AudioEngine } from './audio-engine.js';
 import { VisualEngine } from './visual-engine.js';
+import { platform } from './platform-bridge.js';
 
 const $ = (id) => document.getElementById(id);
 const preview = new VisualEngine($('preview'), { isOutput: false, quality: 'high' });
@@ -51,7 +52,7 @@ function broadcast(force = false) {
   preview.setState(state);
   const ipcState = { ...state };
   if (!force) delete ipcState.logoDataUrl;
-  window.studioAPI?.sendVisualState(ipcState);
+  platform.sendVisualState(ipcState);
 }
 
 function meterValue(value, boost = 1.45) {
@@ -160,25 +161,25 @@ function renderCapturePreview(source) {
   }
   const overlay = document.createElement('div');
   overlay.className = 'capture-overlay';
-  overlay.innerHTML = `<span>${source.kind === 'screen' ? 'Pantalla' : 'Ventana'}</span>${source.name}`;
+  overlay.innerHTML = `<span>${source.kind === 'screen' ? 'Pantalla' : source.kind === 'browser' ? 'Navegador' : 'Ventana'}</span>${source.name}`;
   holder.appendChild(overlay);
 }
 
 async function loadCaptureSources() {
-  captureSources = await window.studioAPI.getCaptureSources();
+  captureSources = await platform.getCaptureSources();
   const select = $('captureSource');
   select.innerHTML = '';
   captureSources.forEach((source) => {
     const option = document.createElement('option');
     option.value = source.id;
-    option.textContent = `${source.kind === 'screen' ? 'Pantalla' : 'Ventana'} · ${source.name}`;
+    option.textContent = `${source.kind === 'screen' ? 'Pantalla' : source.kind === 'browser' ? 'Navegador' : 'Ventana'} · ${source.name}`;
     select.appendChild(option);
   });
   renderCapturePreview(captureSources[0]);
 }
 
 async function loadDisplays() {
-  const displays = await window.studioAPI.getDisplays();
+  const displays = await platform.getDisplays();
   const select = $('displaySelect');
   select.innerHTML = '';
   displays.forEach((display) => {
@@ -258,10 +259,14 @@ $('inputGain').addEventListener('input', (event) => {
 });
 
 $('openOutput').addEventListener('click', async () => {
-  await window.studioAPI.showOutput($('displaySelect').value);
-  broadcast(true);
+  try {
+    await platform.showOutput($('displaySelect').value);
+    broadcast(true);
+  } catch (error) {
+    alert(error.message);
+  }
 });
-$('closeOutput').addEventListener('click', () => window.studioAPI.closeOutput());
+$('closeOutput').addEventListener('click', () => platform.closeOutput());
 
 ['logoFxBlink','logoFxPulse','logoFxSpin','logoFxColor'].forEach((id) => {
   $(id).addEventListener('change', (event) => {
@@ -349,6 +354,42 @@ window.addEventListener('keydown', (event) => {
 });
 
 navigator.mediaDevices?.addEventListener?.('devicechange', () => loadAudioDevices().catch(console.error));
+
+function setupPlatformUi() {
+  const modeBadge = document.getElementById('platformBadge');
+  if (modeBadge) modeBadge.textContent = platform.isWeb ? 'WEB' : 'DESKTOP';
+
+  if (!platform.isWeb) return;
+
+  const appSourceTitle = document.querySelector('#captureWindow')?.closest('.source-card')?.querySelector('.source-title-row strong');
+  const appSourceSmall = document.querySelector('#captureWindow')?.closest('.source-card')?.querySelector('.source-title-row small');
+  const captureLabel = document.querySelector('label[for="captureSource"]');
+  const captureButton = document.getElementById('captureWindow');
+  const systemButton = document.getElementById('captureSystem');
+  const refreshCapture = document.getElementById('refreshCapture');
+  const captureSelect = document.getElementById('captureSource');
+  const displaySelect = document.getElementById('displaySelect');
+  const outputLabel = displaySelect?.previousElementSibling;
+
+  if (appSourceTitle) appSourceTitle.textContent = 'Pestaña / ventana / pantalla';
+  if (appSourceSmall) appSourceSmall.textContent = 'Chrome/Edge abre su selector seguro de captura';
+  if (captureLabel) captureLabel.textContent = 'Fuente web';
+  if (captureButton) captureButton.textContent = 'Elegir fuente + audio';
+  if (systemButton) {
+    systemButton.innerHTML = '<span>◉</span> Elegir pantalla / audio del sistema';
+    systemButton.title = 'En Chrome/Edge elegí Pantalla completa y activá Compartir audio del sistema cuando esté disponible.';
+  }
+  if (refreshCapture) refreshCapture.style.display = 'none';
+  if (captureSelect) captureSelect.disabled = true;
+  if (outputLabel) outputLabel.textContent = 'Salida web';
+
+  const note = document.getElementById('webModeNote');
+  if (note) note.hidden = false;
+
+  setStatus('Modo web listo', 'Para YouTube: elegí una pestaña de Chrome y activá “Compartir audio”.', 'active');
+}
+
+setupPlatformUi();
 
 Promise.all([loadAudioDevices(), loadCaptureSources(), loadDisplays()]).catch(console.error);
 [

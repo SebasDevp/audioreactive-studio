@@ -101,3 +101,7 @@ input[type="range"]::-webkit-slider-thumb{appearance:none;width:13px;height:13px
 
 .visual-error-overlay{position:absolute;inset:12px;z-index:20;display:none;align-items:center;justify-content:center;border:1px solid rgba(255,92,120,.35);border-radius:10px;background:rgba(24,4,10,.78);color:#ff9aac;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
 .visual-rune-core{z-index:2}.visual-rune-echo{z-index:1}
+
+.platform-badge{display:inline-flex;align-items:center;justify-content:center;margin-left:7px;padding:2px 6px;border-radius:999px;border:1px solid #353d50;background:#121722;color:#9ce9ff;font-size:8px;letter-spacing:.10em;vertical-align:middle}
+.web-mode-note{margin:0 0 14px;padding:10px 13px;border:1px solid #243143;border-radius:12px;background:linear-gradient(90deg,rgba(0,217,255,.06),rgba(122,92,255,.07));color:#91a0b6;font-size:10px;line-height:1.5}
+.web-mode-note strong{color:#c7f6ff;letter-spacing:.08em}.web-mode-note b{color:#dfe7f2}

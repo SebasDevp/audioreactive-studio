@@ -65,15 +65,13 @@ export class AudioEngine {
   }
 
   async startSelectedWindowCapture(sourceId) {
-    if (!window.studioAPI) throw new Error('La captura de aplicaciones requiere ejecutar AudioReactive Studio con Electron.');
-    await window.studioAPI.selectCaptureSource(sourceId);
-    return this.startDisplayCapture('window');
+    if (window.studioAPI) await window.studioAPI.selectCaptureSource(sourceId);
+    return this.startDisplayCapture(window.studioAPI ? 'window' : 'browser');
   }
 
   async startSystemCapture() {
-    if (!window.studioAPI) throw new Error('La captura del sistema requiere ejecutar AudioReactive Studio con Electron.');
-    await window.studioAPI.selectPrimaryScreen();
-    return this.startDisplayCapture('system');
+    if (window.studioAPI) await window.studioAPI.selectPrimaryScreen();
+    return this.startDisplayCapture(window.studioAPI ? 'system' : 'browser');
   }
 
   async startDisplayCapture(mode) {
@@ -85,14 +83,21 @@ export class AudioEngine {
     const audioTracks = stream.getAudioTracks();
     if (!audioTracks.length) {
       stream.getTracks().forEach((track) => track.stop());
-      throw new Error('Windows no entregó audio de loopback. Revisá que haya audio reproduciéndose y que el dispositivo de salida de Windows esté activo.');
+      const webHint = window.studioAPI
+        ? 'Windows no entregó audio de loopback. Revisá que haya audio reproduciéndose y que el dispositivo de salida de Windows esté activo.'
+        : 'El navegador no recibió audio de la fuente compartida. Para YouTube elegí una pestaña y activá “Compartir audio”. Para pantalla completa, activá el audio del sistema si aparece esa opción.';
+      throw new Error(webHint);
     }
 
     stream.getVideoTracks().forEach((track) => track.stop());
 
     this.mode = mode;
     await this.useStream(stream);
-    const label = mode === 'window' ? 'Ventana + audio del sistema' : 'Audio del sistema';
+    const label = mode === 'window'
+      ? 'Ventana + audio del sistema'
+      : mode === 'browser'
+        ? 'Fuente compartida por el navegador'
+        : 'Audio del sistema';
     this.onState?.({ type: 'connected', mode, label, muted: Boolean(audioTracks[0]?.muted) });
     return { stream, label };
   }
