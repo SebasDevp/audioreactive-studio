@@ -1,6 +1,6 @@
 {
   "name": "audioreactive-studio",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Hybrid desktop and web audio-reactive visual performance app",
   "main": "electron/main.cjs",

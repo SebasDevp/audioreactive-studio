@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AudioReactive Studio · Control v0.8</title>
+    <title>AudioReactive Studio · Control v0.9</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body class="control-body">
@@ -12,7 +12,7 @@
         <div class="brand-wrap">
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.8</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
+            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.9</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
             <h1>AudioReactive <strong>Studio</strong></h1>
           </div>
         </div>
@@ -134,18 +134,41 @@
             <div class="source-card accent-card">
               <div class="source-title-row">
                 <div class="source-icon neon">LOGO</div>
-                <div><strong>Logo vivo</strong><small>Overlay dinámico, editable y multiplicable</small></div>
+                <div><strong>Logo / imagen</strong><small>Overlay multimedia con color y composición profesional</small></div>
               </div>
-              <label for="logoFile">Cargar logo</label>
+              <label for="logoFile">Cargar PNG / SVG / WebP / JPG</label>
               <input id="logoFile" class="file-input" type="file" accept=".png,.svg,.webp,.jpg,.jpeg" />
               <div class="button-grid">
-                <button id="logoToggle" class="primary">Logo: OFF</button>
+                <button id="logoToggle" class="primary">Overlay: OFF</button>
                 <button id="clearLogo">Borrar logo</button>
               </div>
 
               <div class="slider-control"><label><span>Tamaño del logo</span><b id="logoSizeValue">0.28</b></label><input id="logoSize" type="range" min="0.10" max="0.65" value="0.28" step="0.01" /></div>
               <div class="slider-control"><label><span>Opacidad del logo</span><b id="logoOpacityValue">0.85</b></label><input id="logoOpacity" type="range" min="0.05" max="1" value="0.85" step="0.01" /></div>
               <div class="slider-control"><label><span>Cantidad / copias</span><b id="logoCopiesValue">1</b></label><input id="logoCopies" type="range" min="1" max="12" value="1" step="1" /></div>
+
+              <div class="overlay-select-grid">
+                <div>
+                  <label for="logoColorMode">Tratamiento de imagen</label>
+                  <select id="logoColorMode">
+                    <option value="original" selected>Original · conservar colores</option>
+                    <option value="white">Monocromo blanco</option>
+                    <option value="reactive">Tinte reactivo</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="logoBlendMode">Composición</label>
+                  <select id="logoBlendMode">
+                    <option value="normal" selected>Normal</option>
+                    <option value="screen">Screen</option>
+                    <option value="plus-lighter">Add / Plus</option>
+                    <option value="multiply">Multiply</option>
+                    <option value="overlay">Overlay</option>
+                  </select>
+                </div>
+              </div>
+              <div class="slider-control"><label><span>Glow del overlay</span><b id="logoGlowValue">0.22</b></label><input id="logoGlow" type="range" min="0" max="1" value="0.22" step="0.01" /></div>
+              <p class="micro-note overlay-tip"><b>Original</b> es el modo recomendado para fotos, productos e imágenes PNG. Usá <b>Monocromo</b> o <b>Tinte reactivo</b> para logos y símbolos.</p>
 
               <div class="checkbox-grid">
                 <label class="check-pill"><input id="logoFxBlink" type="checkbox" /> <span>Titilar</span></label>
@@ -154,7 +177,7 @@
                 <label class="check-pill"><input id="logoFxColor" type="checkbox" /> <span>Cambio de color</span></label>
               </div>
 
-              <label class="quality-label">Modo del logo</label>
+              <label class="quality-label">Distribución de copias</label>
               <select id="logoMode">
                 <option value="single">Single</option>
                 <option value="ring">Ring</option>

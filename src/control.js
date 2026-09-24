@@ -6,6 +6,9 @@ const $ = (id) => document.getElementById(id);
 const preview = new VisualEngine($('preview'), { isOutput: false, quality: 'high' });
 
 const savedLogo = localStorage.getItem('ars_logo_data') || '';
+const OVERLAY_SETTINGS_KEY = 'ars_overlay_settings_v09';
+let savedOverlaySettings = {};
+try { savedOverlaySettings = JSON.parse(localStorage.getItem(OVERLAY_SETTINGS_KEY) || '{}') || {}; } catch (_) {}
 
 const state = {
   sub: 0,
@@ -38,8 +41,15 @@ const state = {
   logoFxPulse: false,
   logoFxSpin: false,
   logoFxColor: false,
+  logoColorMode: 'original',
+  logoBlendMode: 'normal',
+  logoGlow: 0.22,
   logoDataUrl: savedLogo
 };
+
+Object.assign(state, savedOverlaySettings);
+state.logoDataUrl = savedLogo;
+state.logoEnabled = savedLogo ? (savedOverlaySettings.logoEnabled ?? true) : false;
 
 let lastBroadcast = 0;
 let captureSources = [];
@@ -85,16 +95,29 @@ function setStatus(title, detail, mode = 'idle') {
   $('audioStatus').className = `status-dot ${mode}`;
 }
 
+const OVERLAY_SETTING_KEYS = [
+  'logoEnabled','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoMode',
+  'logoFxBlink','logoFxPulse','logoFxSpin','logoFxColor','logoColorMode','logoBlendMode','logoGlow'
+];
+
+function persistOverlaySettings() {
+  try {
+    const saved = {};
+    OVERLAY_SETTING_KEYS.forEach((key) => { saved[key] = state[key]; });
+    localStorage.setItem(OVERLAY_SETTINGS_KEY, JSON.stringify(saved));
+  } catch (_) {}
+}
+
 function setLogoUi() {
   const hasLogo = Boolean(state.logoDataUrl);
-  $('logoToggle').textContent = state.logoEnabled ? 'Logo: ON' : 'Logo: OFF';
+  $('logoToggle').textContent = state.logoEnabled ? 'Overlay: ON' : 'Overlay: OFF';
   $('logoToggle').disabled = !hasLogo;
   $('clearLogo').disabled = !hasLogo;
   $('logoHint').textContent = hasLogo
     ? state.logoEnabled
-      ? 'El logo está cargado. Podés moverlo, multiplicarlo y aplicarle comportamientos para volver más vivo el set.'
-      : 'El logo está cargado pero actualmente está apagado.'
-    : 'Cargá un PNG/SVG/WebP/JPG y lo integraremos como overlay vivo sobre todas las visuales.';
+      ? 'Overlay cargado. En modo Original conserva exactamente los colores de la imagen; Monocromo y Reactivo son ideales para logos.'
+      : 'El overlay está cargado pero actualmente está apagado.'
+    : 'Cargá PNG/SVG/WebP/JPG. Original respeta fotografías e imágenes; los otros modos permiten estilizar logos.';
 }
 
 const audio = new AudioEngine(
@@ -271,6 +294,7 @@ $('closeOutput').addEventListener('click', () => platform.closeOutput());
 ['logoFxBlink','logoFxPulse','logoFxSpin','logoFxColor'].forEach((id) => {
   $(id).addEventListener('change', (event) => {
     state[id] = event.target.checked;
+    persistOverlaySettings();
     broadcast(true);
   });
 });
@@ -291,6 +315,9 @@ const bindings = [
   ['logoPosX', 'logoPosX', true],
   ['logoPosY', 'logoPosY', true],
   ['logoRotation', 'logoRotation', true],
+  ['logoGlow', 'logoGlow', true],
+  ['logoColorMode', 'logoColorMode', false],
+  ['logoBlendMode', 'logoBlendMode', false],
   ['colorA', 'colorA', false],
   ['colorB', 'colorB', false],
   ['quality', 'quality', false],
@@ -305,6 +332,7 @@ bindings.forEach(([id, key, numeric]) => {
       $(`${id}Value`).textContent = Number(event.target.value).toFixed(decimals);
     }
     if (id === 'quality') $('qualityBadge').textContent = event.target.value === 'ultra' ? 'ULTRA' : event.target.value === 'performance' ? 'PERF' : 'HD';
+    if (id.startsWith('logo')) persistOverlaySettings();
     broadcast(true);
   });
 });
@@ -316,7 +344,8 @@ $('logoFile').addEventListener('change', async (event) => {
   reader.onload = () => {
     state.logoDataUrl = String(reader.result || '');
     state.logoEnabled = true;
-    localStorage.setItem('ars_logo_data', state.logoDataUrl);
+    try { localStorage.setItem('ars_logo_data', state.logoDataUrl); } catch (_) {}
+    persistOverlaySettings();
     setLogoUi();
     broadcast(true);
   };
@@ -326,6 +355,7 @@ $('logoFile').addEventListener('change', async (event) => {
 $('logoToggle').addEventListener('click', () => {
   if (!state.logoDataUrl) return;
   state.logoEnabled = !state.logoEnabled;
+  persistOverlaySettings();
   setLogoUi();
   broadcast(true);
 });
@@ -335,6 +365,7 @@ $('clearLogo').addEventListener('click', () => {
   state.logoEnabled = false;
   $('logoFile').value = '';
   localStorage.removeItem('ars_logo_data');
+  persistOverlaySettings();
   setLogoUi();
   broadcast(true);
 });
@@ -393,13 +424,15 @@ setupPlatformUi();
 
 Promise.all([loadAudioDevices(), loadCaptureSources(), loadDisplays()]).catch(console.error);
 [
-  'preset','intensity','contrast','speed','zoom','density','bloom','colorMix','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation'
+  'preset','intensity','contrast','speed','zoom','density','bloom','colorMix','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'
 ].forEach((id) => { $(id).value = String(state[id]); });
 $('quality').value = state.quality;
 $('logoMode').value = state.logoMode;
+$('logoColorMode').value = state.logoColorMode;
+$('logoBlendMode').value = state.logoBlendMode;
 ['logoFxBlink','logoFxPulse','logoFxSpin','logoFxColor'].forEach((id)=>{ $(id).checked = Boolean(state[id]); });
 $('inputGainValue').textContent = `${Number($('inputGain').value).toFixed(2)}×`;
-['intensity','contrast','speed','zoom','density','bloom','colorMix','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation'].forEach((id)=>{
+['intensity','contrast','speed','zoom','density','bloom','colorMix','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'].forEach((id)=>{
   if ($(`${id}Value`)) {
     const decimals = id === 'logoCopies' ? 0 : 2;
     $(`${id}Value`).textContent = Number(state[id]).toFixed(decimals);

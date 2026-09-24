@@ -639,6 +639,9 @@ export class VisualEngine {
     this.logoPosY = 0;
     this.logoRotation = 0.35;
     this.logoMode = 'single';
+    this.logoColorMode = 'original';
+    this.logoBlendMode = 'normal';
+    this.logoGlow = 0.22;
     this.logoFxBlink = false;
     this.logoFxPulse = false;
     this.logoFxSpin = false;
@@ -655,6 +658,8 @@ export class VisualEngine {
     this.runeAngle = 0;
     this.runeEchoAngle = 0;
     this.lastState = {};
+    this.containerWidth = Math.max(1, container.clientWidth);
+    this.containerHeight = Math.max(1, container.clientHeight);
 
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -784,7 +789,13 @@ ${fragmentLog}`;
     while (this.logoNodes.length < count) {
       const node = document.createElement('img');
       node.className = 'visual-logo';
-      node.alt = 'Logo overlay';
+      node.alt = 'Overlay visual';
+      node.draggable = false;
+      node.decoding = 'async';
+      node.addEventListener('load', () => {
+        const ratio = node.naturalWidth && node.naturalHeight ? node.naturalWidth / node.naturalHeight : 1;
+        node.dataset.aspect = String(Number.isFinite(ratio) && ratio > 0 ? ratio : 1);
+      });
       this.logoWrap.appendChild(node);
       this.logoNodes.push(node);
     }
@@ -843,6 +854,9 @@ ${fragmentLog}`;
     if (state.logoPosY != null) this.logoPosY = Number(state.logoPosY);
     if (state.logoRotation != null) this.logoRotation = Number(state.logoRotation);
     if (state.logoMode != null) this.logoMode = String(state.logoMode);
+    if (state.logoColorMode != null) this.logoColorMode = String(state.logoColorMode);
+    if (state.logoBlendMode != null) this.logoBlendMode = String(state.logoBlendMode);
+    if (state.logoGlow != null) this.logoGlow = clamp(Number(state.logoGlow), 0, 1);
     if (state.logoFxBlink != null) this.logoFxBlink = Boolean(state.logoFxBlink);
     if (state.logoFxPulse != null) this.logoFxPulse = Boolean(state.logoFxPulse);
     if (state.logoFxSpin != null) this.logoFxSpin = Boolean(state.logoFxSpin);
@@ -854,6 +868,8 @@ ${fragmentLog}`;
   resize() {
     const width = Math.max(1, this.container.clientWidth);
     const height = Math.max(1, this.container.clientHeight);
+    this.containerWidth = width;
+    this.containerHeight = height;
     this.renderer.setSize(width, height, false);
     this.composer.setSize(width, height);
     this.bloomPass.setSize(width, height);
@@ -875,21 +891,24 @@ ${fragmentLog}`;
     const bassPulse = this.uniforms.uBassPulse.value;
     const midPulse = this.uniforms.uMidPulse.value;
     const treblePulse = this.uniforms.uTreblePulse.value;
-    const gate = clamp((level - 0.03) * 8 + beat * 0.7 + bassPulse * 0.25, 0, 1) * this.growth;
 
-    let layerOpacity = this.logoOpacity * (0.12 + gate * 0.88);
+    // Opacity is now literal by default. Audio only modulates it when Titilar is enabled.
+    let layerOpacity = clamp(this.logoOpacity, 0, 1);
     if (this.logoFxBlink) {
-      const blink = 0.55 + 0.45 * Math.sin(time * 6.8 + treblePulse * 3.0);
-      layerOpacity *= 0.55 + blink * 0.45;
+      const musicalBlink = clamp(0.48 + beat * 0.36 + treblePulse * 0.42 + level * 0.08, 0.32, 1);
+      layerOpacity *= musicalBlink;
     }
-    this.logoWrap.style.opacity = `${clamp(layerOpacity, 0, 1).toFixed(3)}`;
+    this.logoWrap.style.opacity = `${layerOpacity.toFixed(3)}`;
+    this.logoWrap.style.mixBlendMode = this.logoBlendMode || 'normal';
 
-    const baseX = 50 + this.logoPosX * 32;
-    const baseY = 50 + this.logoPosY * 32;
-    const spread = this.logoSpread * 36;
+    const baseX = 50 + this.logoPosX * 38;
+    const baseY = 50 + this.logoPosY * 38;
+    const spread = this.logoSpread * 38;
     const count = this.logoNodes.length;
-    const size = this.logoSize * 100;
+    const maxDimension = Math.max(10, Math.min(this.containerWidth, this.containerHeight) * clamp(this.logoSize, 0.02, 1));
     const hueBase = (time * 14 + bassPulse * 160 + treblePulse * 240 + midPulse * 70) % 360;
+    const glowPx = 2 + this.logoGlow * 24;
+    const glowAlpha = 0.04 + this.logoGlow * 0.30;
 
     this.logoNodes.forEach((node, index) => {
       let dx = 0;
@@ -901,37 +920,58 @@ ${fragmentLog}`;
         dx = Math.cos(ang) * spread;
         dy = Math.sin(ang) * spread;
       } else if (this.logoMode === 'line') {
-        dx = (progress - 0.5) * spread * 2.2;
+        dx = (progress - 0.5) * spread * 2.25;
       } else if (this.logoMode === 'mirror') {
         const signs = [[-1,-1],[1,-1],[-1,1],[1,1]][index % 4] || [1,1];
-        const shell = 0.40 + Math.floor(index / 4) * 0.25;
+        const shell = 0.44 + Math.floor(index / 4) * 0.25;
         dx = signs[0] * spread * shell;
         dy = signs[1] * spread * shell;
       } else if (this.logoMode === 'stack') {
-        dy = (progress - 0.5) * spread * 2.3;
+        dy = (progress - 0.5) * spread * 2.25;
       }
 
-      const reactiveSway = this.logoMode === 'single' ? 0.0 : (midPulse * 2.0 + treblePulse * 1.5);
-      dx += Math.sin(time * 0.9 + index * 0.8) * reactiveSway;
-      dy += Math.cos(time * 0.8 + index * 0.7) * reactiveSway * 0.8;
+      // Copies stay stable; subtle musical sway only when there is more than one copy.
+      if (count > 1) {
+        const sway = midPulse * 0.85 + treblePulse * 0.55;
+        dx += Math.sin(time * 0.65 + index * 0.8) * sway;
+        dy += Math.cos(time * 0.58 + index * 0.7) * sway * 0.72;
+      }
 
-      const scaleBoost = this.logoFxPulse ? (1 + bassPulse * 0.24 + beat * 0.14 + level * 0.06) : 1;
-      const scale = scaleBoost * (1 + index * 0.010);
-      const rot = this.logoSpinAngle + (this.logoMode === 'single' ? index * 0 : index * 11);
+      const scaleBoost = this.logoFxPulse ? (1 + bassPulse * 0.22 + beat * 0.13 + level * 0.05) : 1;
+      const scale = scaleBoost;
+      const rot = this.logoSpinAngle + (this.logoMode === 'single' ? 0 : index * 7);
       const hue = this.logoFxColor ? (hueBase + index * (360 / Math.max(1, count))) : 0;
-      const sat = this.logoFxColor ? (1.1 + treblePulse * 1.0 + midPulse * 0.3) : 0.05;
-      const bright = this.logoFxColor ? (1.00 + level * 0.15 + beat * 0.10) : (1.18 + level * 0.08);
+
+      // Preserve the source aspect ratio. "Size" controls the largest dimension.
+      const aspect = Math.max(0.05, Number(node.dataset.aspect) || (node.naturalWidth && node.naturalHeight ? node.naturalWidth / node.naturalHeight : 1));
+      let widthPx;
+      let heightPx;
+      if (aspect >= 1) {
+        widthPx = maxDimension;
+        heightPx = maxDimension / aspect;
+      } else {
+        heightPx = maxDimension;
+        widthPx = maxDimension * aspect;
+      }
 
       node.style.left = `${baseX + dx}%`;
       node.style.top = `${baseY + dy}%`;
-      node.style.width = `${size}%`;
-      node.style.height = `${size}%`;
-      node.style.opacity = `${Math.max(0.18, 1 - index * 0.07).toFixed(3)}`;
+      node.style.width = `${Math.max(2, widthPx).toFixed(1)}px`;
+      node.style.height = `${Math.max(2, heightPx).toFixed(1)}px`;
+      node.style.opacity = '1';
       node.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)}) rotate(${rot.toFixed(2)}deg)`;
-      if (this.logoFxColor) {
-        node.style.filter = `brightness(0) saturate(100%) invert(72%) sepia(85%) saturate(${(4.8 + treblePulse*3.0).toFixed(2)}) hue-rotate(${hue.toFixed(1)}deg) brightness(${bright.toFixed(2)}) drop-shadow(0 0 16px rgba(255,255,255,0.20))`;
+
+      const shadow = `drop-shadow(0 0 ${glowPx.toFixed(1)}px rgba(255,255,255,${glowAlpha.toFixed(3)}))`;
+      if (this.logoColorMode === 'white') {
+        const colorShift = this.logoFxColor ? ` hue-rotate(${hue.toFixed(1)}deg)` : '';
+        node.style.filter = `brightness(0) invert(1)${colorShift} brightness(${(1.0 + level*0.08).toFixed(2)}) ${shadow}`;
+      } else if (this.logoColorMode === 'reactive') {
+        const reactiveHue = this.logoFxColor ? hue : (205 + this.colorMix * 110);
+        node.style.filter = `brightness(0) saturate(100%) invert(72%) sepia(82%) saturate(${(4.2 + treblePulse*2.4).toFixed(2)}) hue-rotate(${reactiveHue.toFixed(1)}deg) brightness(${(1.0 + level*0.10 + beat*0.08).toFixed(2)}) ${shadow}`;
       } else {
-        node.style.filter = `brightness(0) invert(1) brightness(${bright.toFixed(2)}) drop-shadow(0 0 14px rgba(255,255,255,0.16))`;
+        // ORIGINAL: never flatten the RGB channels. Photos and arbitrary PNG/WebP stay intact.
+        const hueShift = this.logoFxColor ? `hue-rotate(${hue.toFixed(1)}deg)` : 'hue-rotate(0deg)';
+        node.style.filter = `${hueShift} saturate(${(1.0 + (this.logoFxColor ? treblePulse*0.22 : 0)).toFixed(2)}) brightness(${(1.0 + level*0.035).toFixed(2)}) ${shadow}`;
       }
     });
   }

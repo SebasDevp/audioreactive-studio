@@ -1,6 +1,6 @@
-# AudioReactive Studio v0.8 · Desktop + Web
+# AudioReactive Studio v0.9 · Desktop + Web
 
-AudioReactive Studio ahora puede ejecutarse de dos maneras desde el mismo proyecto:
+AudioReactive Studio v0.9 puede ejecutarse de dos maneras desde el mismo proyecto:
 
 - **Desktop / Electron**: mantiene la experiencia actual, selección de pantallas y workflow de escritorio.
 - **Web / Browser**: abre el estudio directamente desde Chrome/Edge, captura una pestaña/ventana/pantalla mediante el selector seguro del navegador y permite abrir una ventana OUTPUT independiente.
@@ -110,3 +110,17 @@ Browser ──┘
 ```
 
 El objetivo es que los próximos presets y mejoras se programen una sola vez y funcionen tanto en Desktop como en Web.
+
+
+## Overlay multimedia v0.9
+
+La capa antes llamada “Logo vivo” ahora funciona también correctamente con imágenes y fotografías:
+
+- **Original**: conserva los colores y transparencia del archivo. Es el modo recomendado para imágenes PNG/JPG/WebP.
+- **Monocromo blanco**: convierte el archivo en una silueta clara, útil para logos.
+- **Tinte reactivo**: estiliza logos/símbolos y permite animar el color con la música.
+- **Composición**: Normal, Screen, Add/Plus, Multiply y Overlay.
+- **Glow** independiente.
+- La opacidad ahora representa de forma directa el valor elegido; sólo se modula cuando se activa Titilar.
+- El tamaño preserva la relación de aspecto real de la imagen.
+- Las copias mantienen su proporción y se distribuyen sin deformar el contenido.
