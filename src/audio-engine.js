@@ -19,6 +19,13 @@ export class AudioEngine {
     this.mode = 'none';
     this.prevBands = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
     this.pulses = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
+    // Dual-timescale analysis: instantaneous values + slower musical envelopes.
+    this.attenuated = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
+    this.prevSpectrum = null;
+    this.spectrumPrimed = false;
+    this.fluxEnvelope = 0;
+    this.centroidEnvelope = 0.5;
+    this.lastAnalysisTime = performance.now();
   }
 
   async ensureContext() {
@@ -135,6 +142,12 @@ export class AudioEngine {
     this.lastBeat = 0;
     this.prevBands = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
     this.pulses = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
+    this.attenuated = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
+    this.prevSpectrum = null;
+    this.spectrumPrimed = false;
+    this.fluxEnvelope = 0;
+    this.centroidEnvelope = 0.5;
+    this.lastAnalysisTime = performance.now();
 
     for (const track of stream.getAudioTracks()) {
       track.addEventListener('mute', () => this.onState?.({ type: 'muted', mode: this.mode, label: track.label || 'Audio' }));
@@ -206,6 +219,70 @@ export class AudioEngine {
     return this.pulses[name];
   }
 
+  updateAttenuated(name, value, dt) {
+    const current = this.attenuated[name] ?? 0;
+    // Fast attack, slower release. Time based, so the behavior stays stable across FPS.
+    const tau = value > current ? 0.10 : 0.55;
+    const k = 1 - Math.exp(-Math.max(0.001, dt) / tau);
+    const next = current + (value - current) * k;
+    this.attenuated[name] = clamp(next);
+    return this.attenuated[name];
+  }
+
+  spectralDynamics(dt) {
+    if (!this.freq?.length) return { flux: 0, centroid: this.centroidEnvelope || 0.5 };
+    if (!this.prevSpectrum || this.prevSpectrum.length !== this.freq.length) {
+      this.prevSpectrum = new Float32Array(this.freq.length);
+      this.spectrumPrimed = false;
+    }
+
+    let riseSum = 0;
+    let weightSum = 0;
+    let energySum = 0;
+    let count = 0;
+    const last = Math.max(1, this.freq.length - 1);
+
+    for (let i = 1; i < this.freq.length; i += 2) {
+      const x = this.freq[i] / 255;
+      const prev = this.prevSpectrum[i] || 0;
+      if (this.spectrumPrimed) riseSum += Math.max(0, x - prev);
+      this.prevSpectrum[i] = x;
+      energySum += x;
+      weightSum += x * (i / last);
+      count++;
+    }
+
+    this.spectrumPrimed = true;
+    const rawFlux = clamp((riseSum / Math.max(1, count)) * 10.5);
+    const rawCentroid = energySum > 0.0001 ? clamp(weightSum / energySum) : this.centroidEnvelope;
+
+    const fluxTau = rawFlux > this.fluxEnvelope ? 0.055 : 0.22;
+    const fluxK = 1 - Math.exp(-Math.max(0.001, dt) / fluxTau);
+    this.fluxEnvelope += (rawFlux - this.fluxEnvelope) * fluxK;
+
+    const centroidK = 1 - Math.exp(-Math.max(0.001, dt) / 0.18);
+    this.centroidEnvelope += (rawCentroid - this.centroidEnvelope) * centroidK;
+
+    return {
+      flux: clamp(this.fluxEnvelope),
+      centroid: clamp(this.centroidEnvelope)
+    };
+  }
+
+  compactWaveform(sampleCount = 64) {
+    if (!this.time?.length) return [];
+    const out = new Array(sampleCount);
+    const step = this.time.length / sampleCount;
+    for (let i = 0; i < sampleCount; i++) {
+      const center = Math.min(this.time.length - 1, Math.floor((i + 0.5) * step));
+      const a = (this.time[Math.max(0, center - 1)] - 128) / 128;
+      const b = (this.time[center] - 128) / 128;
+      const c = (this.time[Math.min(this.time.length - 1, center + 1)] - 128) / 128;
+      out[i] = clamp((a + b * 2 + c) * 0.25, -1, 1);
+    }
+    return out;
+  }
+
   loop = () => {
     if (!this.analyser) return;
     this.analyser.getByteFrequencyData(this.freq);
@@ -218,6 +295,8 @@ export class AudioEngine {
     const treble = Math.min(1, this.bandEnergy(2400, 14000) * 1.15);
     const level = this.rms();
     const now = performance.now();
+    const dt = Math.min(0.10, Math.max(0.001, (now - this.lastAnalysisTime) / 1000));
+    this.lastAnalysisTime = now;
     const beat = this.detectBeat(Math.max(sub, bass), lowMid, level, now);
 
     const subPulse = this.updateBandPulse('sub', sub, { riseWeight: 4.8, sustainWeight: 0.26, threshold: 0.025, decay: 0.87 });
@@ -226,7 +305,20 @@ export class AudioEngine {
     const treblePulse = this.updateBandPulse('treble', treble, { riseWeight: 5.8, sustainWeight: 0.23, threshold: 0.045, decay: 0.80 });
     const levelPulse = this.updateBandPulse('level', level, { riseWeight: 5.0, sustainWeight: 0.22, threshold: 0.03, decay: 0.86 });
 
-    this.onFrame?.({ sub, bass, mid, treble, level, beat, subPulse, bassPulse, midPulse, treblePulse, levelPulse });
+    const subAtt = this.updateAttenuated('sub', sub, dt);
+    const bassAtt = this.updateAttenuated('bass', bass, dt);
+    const midAtt = this.updateAttenuated('mid', mid, dt);
+    const trebleAtt = this.updateAttenuated('treble', treble, dt);
+    const levelAtt = this.updateAttenuated('level', level, dt);
+    const { flux, centroid } = this.spectralDynamics(dt);
+    const waveform = this.compactWaveform(64);
+
+    this.onFrame?.({
+      sub, bass, mid, treble, level, beat,
+      subPulse, bassPulse, midPulse, treblePulse, levelPulse,
+      subAtt, bassAtt, midAtt, trebleAtt, levelAtt,
+      flux, centroid, waveform
+    });
     this.raf = requestAnimationFrame(this.loop);
   };
 
@@ -247,6 +339,7 @@ export class AudioEngine {
     this.time = null;
     this.prevBands = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
     this.pulses = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
+    this.attenuated = { sub: 0, bass: 0, mid: 0, treble: 0, level: 0 };
     if (resetMode) this.mode = 'none';
   }
 }

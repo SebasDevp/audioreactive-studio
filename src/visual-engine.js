@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
 const vegvisirUrl = new URL('./assets/vegvisir.webp', import.meta.url).href;
 
@@ -25,6 +27,13 @@ const GLSL_COMMON = String.raw`
   uniform float uTreble;
   uniform float uLevel;
   uniform float uBeat;
+  uniform float uSubAtt;
+  uniform float uBassAtt;
+  uniform float uMidAtt;
+  uniform float uTrebleAtt;
+  uniform float uLevelAtt;
+  uniform float uFlux;
+  uniform float uCentroid;
   uniform float uIntensity;
   uniform float uContrast;
   uniform float uZoom;
@@ -49,6 +58,9 @@ const GLSL_COMMON = String.raw`
   uniform float uFlow;
   uniform float uAudioZoom;
   uniform float uTransitionZoom;
+  uniform float uSceneSeed;
+  uniform float uFrameRandom;
+  uniform float uTreeGrowth;
   uniform vec3 uColorA;
   uniform vec3 uColorB;
 
@@ -99,7 +111,7 @@ const GLSL_COMMON = String.raw`
 
   vec3 palette(float t){
     // Smooth continuous A/B fusion. uColorMix biases the palette without creating hard bands.
-    float phase = t*2.35 + uTime*0.035 + uPatternShift*0.14 + uMidPulse*0.16;
+    float phase = t*2.35 + uTime*0.035 + uPatternShift*0.14 + uMidPulse*0.16 + uMidAtt*0.20 + uSceneSeed*0.11;
     float wave = 0.5 + 0.5*sin(phase + 0.18*sin(phase*0.47));
     float bias = (uColorMix - 0.5) * 0.92;
     float blend = smoothstep(0.02, 0.98, clamp(wave*0.78 + 0.11 + bias, 0.0, 1.0));
@@ -233,46 +245,6 @@ const GLSL_COMMON = String.raw`
       d += glowLine(sdSegment(p, vec2(0.0,-0.42), vec2(0.0,0.42)), 0.013);
     }
     return d;
-  }
-
-  float digitalGlyph(vec2 p, float seed){
-    // Procedural segmented glyph: readable as code without relying on a texture atlas.
-    p.x *= 1.18;
-    float hTop = glowLine(sdSegment(p, vec2(-0.16, 0.29), vec2(0.16, 0.29)), 0.018) * step(0.36, hash11(seed+1.0));
-    float hMid = glowLine(sdSegment(p, vec2(-0.15, 0.00), vec2(0.15, 0.00)), 0.018) * step(0.42, hash11(seed+2.0));
-    float hBot = glowLine(sdSegment(p, vec2(-0.16,-0.29), vec2(0.16,-0.29)), 0.018) * step(0.38, hash11(seed+3.0));
-    float vLT  = glowLine(sdSegment(p, vec2(-0.17, 0.27), vec2(-0.17, 0.03)), 0.016) * step(0.44, hash11(seed+4.0));
-    float vLB  = glowLine(sdSegment(p, vec2(-0.17,-0.03), vec2(-0.17,-0.27)), 0.016) * step(0.46, hash11(seed+5.0));
-    float vRT  = glowLine(sdSegment(p, vec2( 0.17, 0.27), vec2( 0.17, 0.03)), 0.016) * step(0.43, hash11(seed+6.0));
-    float vRB  = glowLine(sdSegment(p, vec2( 0.17,-0.03), vec2( 0.17,-0.27)), 0.016) * step(0.45, hash11(seed+7.0));
-    float diagA = glowLine(sdSegment(p, vec2(-0.13,0.24), vec2(0.13,-0.24)),0.014) * step(0.72,hash11(seed+8.0));
-    float diagB = glowLine(sdSegment(p, vec2(0.13,0.24), vec2(-0.13,-0.24)),0.014) * step(0.76,hash11(seed+9.0));
-    float dot = exp(-dot(p-vec2(0.0,-0.36),p-vec2(0.0,-0.36))*900.0) * step(0.72,hash11(seed+10.0));
-    return min(1.65, hTop+hMid+hBot+vLT+vLB+vRT+vRB+diagA+diagB+dot);
-  }
-
-  float treeField(vec2 p, float t){
-    // Folded binary tree. Five iterations produce a deep tree with only five SDF evaluations.
-    vec2 q = p;
-    q.y += 0.92;
-    float d = 10.0;
-    float len = 0.42;
-    float width = 0.016;
-    float growth = 0.18 + uGrowth*0.82;
-    float branchAngle = 0.50 + 0.10*sin(uPatternShift*0.23) + 0.12*uMidPulse + 0.06*uRandomness;
-    for(int i=0;i<5;i++){
-      float fi = float(i);
-      float levelMask = smoothstep(fi*0.19-0.12, fi*0.19+0.12, growth);
-      float seg = sdSegment(q, vec2(0.0,0.0), vec2(0.0,len));
-      d = min(d, seg + (1.0-levelMask)*2.0);
-      q.y -= len;
-      q.x = abs(q.x);
-      q = rot(-(branchAngle + 0.025*sin(t*0.45 + fi + uPatternShift*0.08))) * q;
-      q *= 1.38;
-      len *= 0.78;
-      width *= 0.78;
-    }
-    return glowLine(d, 0.010 + 0.004*uBassPulse);
   }
 
 
@@ -594,39 +566,64 @@ const PRESET_DEFINITIONS = [
     col += mix(vec3(0.8,0.95,1.0), palette(0.7), 0.45) * backDust;
     return col;
   }` },
-  { name: 'matrixLattice', glsl: String.raw`  vec3 matrixLattice(vec2 p, float t){
-    // Matrix rain: falling columns, bright heads and evolving procedural glyphs.
+  { name: 'matrixLattice', glsl: String.raw`
+  float digitalGlyph(vec2 p, float seed){
+    p.x *= 1.18;
+    float hTop = glowLine(sdSegment(p, vec2(-0.16, 0.29), vec2(0.16, 0.29)), 0.018) * step(0.36, hash11(seed+1.0));
+    float hMid = glowLine(sdSegment(p, vec2(-0.15, 0.00), vec2(0.15, 0.00)), 0.018) * step(0.42, hash11(seed+2.0));
+    float hBot = glowLine(sdSegment(p, vec2(-0.16,-0.29), vec2(0.16,-0.29)), 0.018) * step(0.38, hash11(seed+3.0));
+    float vLT  = glowLine(sdSegment(p, vec2(-0.17, 0.27), vec2(-0.17, 0.03)), 0.016) * step(0.44, hash11(seed+4.0));
+    float vLB  = glowLine(sdSegment(p, vec2(-0.17,-0.03), vec2(-0.17,-0.27)), 0.016) * step(0.46, hash11(seed+5.0));
+    float vRT  = glowLine(sdSegment(p, vec2( 0.17, 0.27), vec2(0.17, 0.03)), 0.016) * step(0.43, hash11(seed+6.0));
+    float vRB  = glowLine(sdSegment(p, vec2( 0.17,-0.03), vec2(0.17,-0.27)), 0.016) * step(0.45, hash11(seed+7.0));
+    float diagA = glowLine(sdSegment(p, vec2(-0.13,0.24), vec2(0.13,-0.24)),0.014) * step(0.72,hash11(seed+8.0));
+    float diagB = glowLine(sdSegment(p, vec2(0.13,0.24), vec2(-0.13,-0.24)),0.014) * step(0.76,hash11(seed+9.0));
+    float dot = exp(-dot(p-vec2(0.0,-0.36),p-vec2(0.0,-0.36))*900.0) * step(0.72,hash11(seed+10.0));
+    return min(1.65, hTop+hMid+hBot+vLT+vLB+vRT+vRB+diagA+diagB+dot);
+  }
+
+  vec3 matrixLattice(vec2 p, float t){
+    float speedRatio = max(0.01, uSpeed / 0.88);
+    float matrixTempo = clamp(pow(speedRatio, 1.62), 0.022, 2.65);
+    float mt = t * matrixTempo;
+
     float columns = 15.0 + floor(uDensity*4.0);
-    float rows = 15.0 + floor(uDensity*3.0);
+    float rows = 16.0 + floor(uDensity*3.0);
     float xCell = (p.x + 1.55) * columns;
     float colId = floor(xCell);
     float gx = fract(xCell) - 0.5;
-    float colSeed = hash11(colId*3.71 + floor(uPatternShift*0.35)*9.17);
-    float speed = 0.24 + colSeed*0.52 + uTreble*0.16 + uFlow*0.08;
-    float headY = 1.35 - mod(t*speed + colSeed*5.8 + uPatternShift*0.07, 2.75);
-    float trailDistance = mod(headY - p.y + 2.75, 2.75);
-    float trail = exp(-trailDistance*(1.55 + uDensity*0.16));
-    float head = exp(-abs(trailDistance)*18.0);
 
-    float yFlow = (p.y + t*speed + colSeed*1.7) * rows;
+    float mutationBand = floor(uPatternShift*(0.30 + uRandomness*1.10));
+    float colSeed = hash11(colId*3.71 + mutationBand*9.17);
+    float dropRate = 0.095 + colSeed*0.23 + uTrebleAtt*0.045 + uFlow*0.018;
+
+    float headY = 1.36 - mod(mt*dropRate + colSeed*5.8, 2.78);
+    float trailDistance = mod(headY - p.y + 2.78, 2.78);
+    float trail = exp(-trailDistance*(1.65 + uDensity*0.18));
+    float head = exp(-trailDistance*23.0);
+
+    float yFlow = (p.y + mt*dropRate + colSeed*1.7) * rows;
     float rowId = floor(yFlow);
     float gy = fract(yFlow) - 0.5;
     vec2 gp = vec2(gx*0.78, gy*0.74);
-    float glyphSeed = colId*31.7 + rowId*7.13 + floor(uPatternShift*(0.55+uRandomness));
+    float glyphSeed = colId*31.7 + rowId*7.13 + mutationBand*(0.72+uRandomness*1.25);
     float glyph = digitalGlyph(gp, glyphSeed);
-    float flicker = 0.64 + 0.36*hash11(glyphSeed + floor(t*(3.0+uTreble*4.0)));
-    float rain = glyph * flicker * (0.12 + trail*1.05 + head*1.30);
 
-    // Fine vertical phosphor and occasional code sparks.
-    float phosphor = glowLine(gx,0.018) * trail * 0.08;
-    float spark = exp(-dot(gp,gp)*95.0) * step(0.87,hash11(glyphSeed+44.0)) * (0.2+uTreblePulse*0.65);
-    float scan = glowLine(fract((p.y-t*0.08)*14.0)-0.5,0.025)*0.022;
+    float flickerStep = floor(mt*(0.55 + uTrebleAtt*0.85) + uPatternShift*0.08);
+    float flicker = 0.78 + 0.22*hash11(glyphSeed + flickerStep);
+    float rain = glyph * flicker * (0.08 + trail*1.02 + head*1.42);
 
-    vec3 matrixGreen = vec3(0.04,0.93,0.27);
-    vec3 headGreen = vec3(0.74,1.0,0.82);
-    vec3 tinted = mix(matrixGreen, palette(0.16+p.y*0.045+t*0.012), 0.08 + uColorMix*0.22);
+    float phosphor = glowLine(gx,0.017) * trail * 0.065;
+    float spark = exp(-dot(gp,gp)*110.0)
+      * step(0.92-uRandomness*0.05,hash11(glyphSeed+44.0))
+      * (0.10+uTreblePulse*0.58+uFlux*0.35);
+    float scan = glowLine(fract((p.y-mt*0.018)*14.0)-0.5,0.022)*0.013;
+
+    vec3 matrixGreen = vec3(0.035,0.92,0.24);
+    vec3 headGreen = vec3(0.76,1.0,0.84);
+    vec3 tinted = mix(matrixGreen, palette(0.16+p.y*0.045+mt*0.006), 0.06 + uColorMix*0.18);
     vec3 col = tinted * (rain + phosphor + scan);
-    col += headGreen * glyph * head * (0.18 + uBeat*0.18);
+    col += headGreen * glyph * head * (0.20 + uBeat*0.18);
     col += headGreen * spark;
     return col;
   }` },
@@ -709,28 +706,244 @@ const PRESET_DEFINITIONS = [
     col+=mix(vec3(1.0,0.74,0.42),palette(0.18),0.25)*core;
     return max(col,vec3(0.0));
   }` },
-  { name: 'frequencyTree', glsl: String.raw`  vec3 frequencyTree(vec2 uv, float t){
-    vec2 p=uv;
-    float sway=(0.025+uFlow*0.035)*sin(t*0.58+p.y*2.3+uPatternShift*0.10)*(0.4+uMid+uMidPulse);
-    p.x+=sway*smoothstep(-0.95,0.75,p.y);
-    float branches=treeField(p,t);
-    float trunkGlow=glowLine(sdSegment(p,vec2(0.0,-0.90),vec2(0.0,-0.48)),0.022+uBassPulse*0.008)*0.28;
+  { name: 'frequencyTree', glsl: String.raw`
+  float treeTrunkField(vec2 p, float t){
+    float body = 0.0;
+    vec2 prev = vec2(0.0,-1.08);
+    for(int i=0;i<8;i++){
+      float fi=float(i);
+      float k=(fi+1.0)/8.0;
+      float sway=sin(t*0.16+fi*0.58+uPatternShift*0.018)*(0.004+uMidAtt*0.018+uFlow*0.010);
+      vec2 next=vec2(sway*k*k, mix(-1.08,0.27,k));
+      float width=mix(0.078,0.022,k)*(0.94+uBassAtt*0.24+uSubAtt*0.10);
+      body += glowLine(sdSegment(p,prev,next),width)*(1.08-k*0.20);
+      prev=next;
+    }
+    float core=glowLine(sdSegment(p,vec2(0.0,-1.02),vec2(0.0,0.18)),0.024)*(0.24+uBassPulse*0.16);
+    return body+core;
+  }
 
-    // Canopy points appear only near branch tips and react strongly to highs.
-    float canopyMask=smoothstep(-0.25,0.92,p.y)*(1.0-smoothstep(0.55,1.38,abs(p.x)));
-    float leaves=dust(p*vec2(1.10,0.92)+vec2(0.0,-t*0.025),t*0.42,uDensity*0.88)*canopyMask*(0.18+uTreble*0.55+uTreblePulse*0.55);
-    float rootMask=(1.0-smoothstep(-0.94,-0.48,p.y));
+  float treeBranchField(vec2 p, float t){
+    float field=0.0;
+    float crownEnergy=clamp(uBassAtt*0.34+uMidAtt*0.58+uTrebleAtt*0.90+uFlux*0.48,0.0,1.65);
+    float livingGrow=max(0.0,uTreeGrowth);
+    for(int b=0;b<12;b++){
+      float fb=float(b);
+      float side=-1.0;
+      if(b>=6) side=1.0;
+      float local=mod(fb,6.0);
+      float seed=hash11(fb*17.71+uSceneSeed*41.3+floor(uPatternShift*(0.08+uRandomness*0.42))*5.73);
+      float seed2=hash11(fb*29.17+uSceneSeed*13.9+3.17);
+      float originY=-0.18+local*0.085+seed2*0.055;
+      vec2 prev=vec2(0.0,originY);
+      float baseAngle=side*(0.46+local*0.075+seed*0.18);
+      float lane=mod(fb,3.0);
+      float bandDrive=uBassAtt*0.55+uBassPulse*0.36;
+      if(lane>0.5) bandDrive=uMidAtt*0.68+uMidPulse*0.44;
+      if(lane>1.5) bandDrive=uTrebleAtt*0.82+uTreblePulse*0.58+uFlux*0.28;
+      float branchGrow=livingGrow*(0.62+seed*0.34)+bandDrive*(0.72+seed2*0.40)+crownEnergy*0.22;
+      float segmentBase=(0.105+seed*0.032)*(1.0+min(livingGrow,10.0)*0.055);
+      float angle=baseAngle;
+      vec2 endpoint=prev;
+      float endpointVis=0.0;
+      for(int j=0;j<8;j++){
+        float fj=float(j);
+        float stage=fj*0.42+local*0.055;
+        float visible=smoothstep(stage-0.20,stage+0.12,branchGrow);
+        float audioTurn=(uMidPulse*(seed-0.5)*0.10+uTreblePulse*(seed2-0.5)*0.14+uFlux*(seed-0.5)*0.10);
+        float wave=sin(t*(0.12+seed*0.09)+fj*0.72+fb*0.61)*(0.010+uFlow*0.030+crownEnergy*0.012);
+        angle += side*(0.018+seed2*0.010)+audioTurn+wave;
+        vec2 dir=vec2(sin(angle),cos(angle));
+        vec2 next=prev+dir*segmentBase*(0.93+fj*0.045);
+        float taper=mix(0.017,0.0042,fj/7.0);
+        field += glowLine(sdSegment(p,prev,next),taper)*visible*(0.96-fj*0.045);
+
+        if(j==2 || j==5){
+          float twigVis=visible*smoothstep(stage+0.05,stage+0.42,branchGrow);
+          float twigSide=-side;
+          if(mod(fj+fb,2.0)>0.5) twigSide=side;
+          float twigAngle=angle+twigSide*(0.46+seed2*0.24);
+          vec2 twigEnd=next+vec2(sin(twigAngle),cos(twigAngle))*segmentBase*(0.72+seed*0.28);
+          field += glowLine(sdSegment(p,next,twigEnd),taper*0.58)*twigVis*0.62;
+        }
+        prev=next;
+        endpoint=next;
+        endpointVis=visible;
+      }
+      float bud=exp(-dot(p-endpoint,p-endpoint)/(0.0012+uTrebleAtt*0.0014));
+      field += bud*endpointVis*(0.020+uTreblePulse*0.050+uFlux*0.025);
+    }
+    return field;
+  }
+
+  float treeRootField(vec2 p, float t){
     float roots=0.0;
+    for(int i=0;i<7;i++){
+      float fi=float(i);
+      float seed=hash11(fi*19.3+uSceneSeed*7.1);
+      float side=-1.0;
+      if(i>=4) side=1.0;
+      float angle=side*(0.32+seed*0.62);
+      vec2 prev=vec2((seed-0.5)*0.018,-0.98);
+      float len=0.30+uSubAtt*0.28+uBassAtt*0.14;
+      for(int j=0;j<4;j++){
+        float fj=float(j);
+        angle += side*(seed-0.5)*0.055+sin(t*0.12+fi+fj)*0.010;
+        vec2 next=prev+vec2(sin(angle),-abs(cos(angle)))*(len/4.0)*(0.92+fj*0.06);
+        roots += glowLine(sdSegment(p,prev,next),mix(0.016,0.005,fj/3.0))*(0.34+uSubPulse*0.28);
+        prev=next;
+      }
+    }
+    return roots;
+  }
+
+  vec3 frequencyTree(vec2 uv, float t){
+    vec2 p=uv;
+    float body=treeTrunkField(p,t);
+    float branches=treeBranchField(p,t);
+    float roots=treeRootField(p,t);
+
+    float crownMask=smoothstep(-0.30,0.55,p.y)*(1.0-smoothstep(0.78,1.72,abs(p.x)));
+    float leaves=dust(p*vec2(0.92,0.86)+vec2(uPatternShift*0.0018,-t*0.006),t*0.12,uDensity*(0.54+uRandomness*0.22));
+    leaves*=crownMask*(0.035+uTrebleAtt*0.19+uTreblePulse*0.34+uFlux*0.16);
+
+    float crownHalo=circleLine(p-vec2(0.0,0.08),0.72+uBassAtt*0.035,0.006)*0.030;
+    crownHalo+=circleLine(p-vec2(0.0,0.08),0.50+uMidAtt*0.025,0.005)*0.022;
+    float heart=exp(-dot(p-vec2(0.0,-0.28),p-vec2(0.0,-0.28))*(58.0-uBassPulse*9.0))*(0.06+uBassPulse*0.18+uBeat*0.08);
+
+    vec3 wood=mix(vec3(0.30,0.115,0.055),palette(0.10+uPatternShift*0.004),0.40);
+    vec3 living=mix(vec3(0.24,0.84,0.54),palette(0.60+uCentroid*0.22),0.44);
+    vec3 aura=mix(vec3(0.55,0.82,1.0),palette(0.90),0.34);
+    vec3 col=wood*(body*0.82+roots*0.68+heart);
+    col+=living*(branches*0.72+leaves);
+    col+=aura*crownHalo*(0.36+uTrebleAtt*0.24+uFlux*0.14);
+    return col;
+  }
+` },
+  { name: 'auroraVeil', glsl: String.raw`  vec3 auroraVeil(vec2 p, float t){
+    vec2 q=p;
+    float drift=t*(0.13+uFlow*0.06);
+    float n=fbm(q*1.25+vec2(drift*0.35,-drift*0.12));
+    q.x += (n-0.5)*(0.08+uMidAtt*0.13);
+    float ribbons=0.0;
+    for(int i=0;i<7;i++){
+      float fi=float(i);
+      float seed=hash11(fi*13.17+floor(uPatternShift*0.18)*7.31);
+      float y=-0.68+fi*0.22
+        + sin(q.x*(1.18+fi*0.10)+drift*(0.65+seed*0.45)+fi*1.31)*(0.12+uFlow*0.055)
+        + sin(q.x*3.1-drift*0.42+seed*TAU)*0.035;
+      float width=0.028+uTrebleAtt*0.018+uFlux*0.012;
+      ribbons += glowLine(q.y-y,width)*(0.36+seed*0.46);
+    }
+    float curtain=pow(sat(0.56-fbm(q*vec2(1.4,3.4)+vec2(-drift*0.08,drift*0.22))),1.7);
+    float stars=dust(p*0.82,t*0.16,uDensity*0.78)*(0.16+uTreblePulse*0.46+uFlux*0.30);
+    float horizon=exp(-abs(p.y+0.72)/(0.05+uBassAtt*0.04))*0.05;
+    vec3 col=palette(0.22+p.y*0.22+n*0.30+t*0.008)*(ribbons*0.34+curtain*0.18+horizon);
+    col+=mix(vec3(0.82,0.95,1.0),palette(0.82),0.38)*stars;
+    return col;
+  }` },
+  { name: 'feedbackCathedral', glsl: String.raw`  vec3 feedbackCathedral(vec2 p, float t){
+    vec2 q=p;
+    q.y+=0.12;
+    float hall=0.0;
+    float clock=t*(0.055+uBassAtt*0.020);
+    for(int i=0;i<10;i++){
+      float fi=float(i);
+      float z=fract(fi/10.0 + clock*0.10 + uPatternShift*0.004);
+      float scale=mix(0.34,1.75,z);
+      vec2 h=q/scale;
+      float archR=0.70;
+      float arch=circleLine(vec2(h.x,h.y+0.10),archR,0.010+0.006*(1.0-z))
+        * smoothstep(-0.05,0.34,h.y);
+      float columns=glowLine(abs(h.x)-0.70,0.010+0.004*(1.0-z))*smoothstep(-1.0,0.20,-h.y);
+      float floorLine=glowLine(h.y+0.70,0.009)*smoothstep(0.0,0.7,abs(h.x));
+      hall += (arch+columns+floorLine)*(1.0-z)*0.22;
+    }
+    float rose=0.0;
+    vec2 r=rot(t*0.018+uMidAtt*0.05)*p;
+    for(int i=0;i<12;i++){
+      float fi=float(i);
+      vec2 dir=vec2(cos(fi/12.0*TAU),sin(fi/12.0*TAU));
+      rose += glowLine(sdSegment(r,vec2(0.0),dir*(0.18+uTrebleAtt*0.08)),0.006)*0.10;
+    }
+    float center=circleLine(p,0.20+uBassPulse*0.035,0.010)*0.20+rose;
+    float haze=fbm(p*2.2+vec2(t*0.012,-t*0.010))*0.05;
+    vec3 col=palette(0.12+length(p)*0.30+t*0.008)*(hall+center+haze);
+    return col;
+  }` },
+  { name: 'myceliumNetwork', glsl: String.raw`
+  float myceliumLink(vec2 f, vec2 c, vec2 id, vec2 off, float mutation){
+    vec2 mutationVec=vec2(mutation*2.7);
+    vec2 n=(hash22(id+off+mutationVec)-0.5)*0.62+off;
+    float d=sdSegment(f,c,n);
+    float seed=hash21(id+off*7.3+vec2(mutation));
+    float threshold=max(0.42,0.74-uRandomness*0.22-uMidAtt*0.10);
+    float active=1.0-smoothstep(0.28,threshold,seed);
+    return glowLine(d,0.010+uTreblePulse*0.004)*active*(0.10+uMidAtt*0.16+uFlux*0.10);
+  }
+
+  vec3 myceliumNetwork(vec2 p, float t){
+    float scale=3.0+uDensity*0.92;
+    vec2 g=p*scale;
+    vec2 id=floor(g);
+    vec2 f=fract(g)-0.5;
+    float mutation=floor(uPatternShift*(0.16+uRandomness*0.72));
+    vec2 mutationVec=vec2(mutation*2.7);
+    vec2 c=(hash22(id+mutationVec)-0.5)*0.60;
+    float nodePhase=hash21(id+vec2(4.2))*TAU;
+    c += vec2(sin(t*0.09+nodePhase),cos(t*0.08+nodePhase*0.83))*(0.018+uFlow*0.026);
+
+    float net=exp(-dot(f-c,f-c)*118.0)*(0.18+uTrebleAtt*0.40+uBassPulse*0.05);
+    net += myceliumLink(f,c,id,vec2( 1.0, 0.0),mutation);
+    net += myceliumLink(f,c,id,vec2( 0.0, 1.0),mutation);
+    net += myceliumLink(f,c,id,vec2( 1.0, 1.0),mutation);
+    net += myceliumLink(f,c,id,vec2(-1.0, 1.0),mutation);
+
+    float spores=dust(p*1.04,t*0.14,uDensity*0.84)*(0.08+uTreblePulse*0.34+uFlux*0.28);
+    float breath=0.58+0.42*sin(t*0.16+fbm(p*1.6)*3.6+uBassAtt*1.4);
+    float pulseHalo=exp(-dot(f-c,f-c)*(34.0-uBassPulse*8.0))*(0.025+uBeat*0.05);
+    vec3 col=palette(hash21(id)*0.62+uCentroid*0.22+t*0.005)*(net*(0.64+breath*0.24)+pulseHalo);
+    col+=mix(vec3(0.72,1.0,0.86),palette(0.84),0.34)*spores;
+    return col;
+  }
+` },
+  { name: 'luminousVortex', glsl: String.raw`  vec3 luminousVortex(vec2 p, float t){
+    float r=length(p);
+    float a=atan(p.y,p.x);
+    float spin=t*(0.20+uMidAtt*0.08)+uPatternShift*0.030;
+    float spiral=0.0;
     for(int i=0;i<5;i++){
       float fi=float(i);
-      float x=(fi-2.0)*0.17;
-      roots+=glowLine(sdSegment(p,vec2(0.0,-0.78),vec2(x,-1.05+0.035*sin(t+fi))),0.009)*rootMask*0.16;
+      float phase=a*(3.0+fi*0.65)+r*(10.0+fi*2.4)-spin*(1.0+fi*0.10)+fi*1.27;
+      spiral += glowLine(sin(phase),0.035+uTrebleAtt*0.020)*(0.12+fi*0.025);
     }
-    float pulse=circleLine(p-vec2(0.0,-0.56),0.12+uBassPulse*0.05,0.018)*0.12;
-    vec3 bark=mix(vec3(0.26,0.12,0.07),palette(0.14+uPatternShift*0.012),0.42);
-    vec3 leafColor=mix(vec3(0.24,0.88,0.54),palette(0.72+t*0.012),0.44);
-    vec3 col=bark*(branches*0.50+trunkGlow+roots+pulse);
-    col+=leafColor*leaves;
+    float rings=glowLine(sin(r*(18.0+uDensity*3.0)-spin*2.0),0.045+uBassAtt*0.030)*0.13;
+    vec2 q=rot(-spin*0.22)*p;
+    float particles=dust(q*(0.78+r*0.30),t*0.30,uDensity)*(0.20+uTreblePulse*0.58+uFlux*0.30);
+    float core=0.024/max(r*r+0.012,0.012)*(0.10+uBassPulse*0.14+uBeat*0.10);
+    vec3 col=palette(seamlessAngle(p)*0.58+r*0.34+t*0.012)*(spiral*exp(-r*0.55)+rings);
+    col+=mix(vec3(0.88,0.96,1.0),palette(0.90),0.45)*particles;
+    col+=palette(0.18+uCentroid*0.42)*core;
+    return col;
+  }` },
+  { name: 'spectralSpirograph', glsl: String.raw`  vec3 spectralSpirograph(vec2 p, float t){
+    float r=length(p);
+    float a=atan(p.y,p.x);
+    float petals=5.0+floor(uCentroid*7.0+uDensity*0.6);
+    float field=0.0;
+    for(int i=0;i<4;i++){
+      float fi=float(i);
+      float target=0.42+fi*0.105
+        + sin(a*(petals+fi*2.0)+t*(0.14+fi*0.025)+uPatternShift*0.028)*(0.08+uMidAtt*0.07)
+        + sin(a*(2.0+fi)+t*0.08+fi*2.1)*(0.035+uTrebleAtt*0.045);
+      field += glowLine(r-target,0.009+uTreblePulse*0.004)*(0.38-fi*0.055);
+    }
+    float radial=pow(0.5+0.5*sin(a*(petals*2.0)-t*0.23+uFrameRandom*TAU),8.0)
+      *exp(-abs(r-0.56)/(0.22+uBassAtt*0.08))*0.14;
+    float center=circleLine(p,0.14+uBassPulse*0.035,0.010)*0.16;
+    float sparks=dust(p*1.2,t*0.19,uDensity*0.66)*(0.08+uFlux*0.40+uTreblePulse*0.26);
+    vec3 col=palette(seamlessAngle(p)+t*0.010+uCentroid*0.28)*(field+radial+center);
+    col+=mix(vec3(0.9,0.96,1.0),palette(0.76),0.42)*sparks;
     return col;
   }` }
 ];
@@ -745,25 +958,34 @@ function makePresetFragmentShader(index) {
     uv /= max(uZoom,0.05);
     float t = uTime;
     float sceneIndex = SCENE_INDEX_PLACEHOLDER;
-    float patternCell = floor(uPatternShift + 0.5);
-    float patternRnd = hash11(patternCell*13.17 + sceneIndex*7.31);
-    float patternRnd2 = hash11(patternCell*4.91 + sceneIndex*11.73 + 8.2);
-    uv = rot((patternRnd-0.5) * (0.045 + 0.18*uMidPulse)) * uv;
-    float globalWarp = (0.006 + uFlow*0.010) * (uMidPulse*0.55 + uTreblePulse*0.78) * (0.72 + patternRnd2*0.56);
-    globalWarp *= (0.45 + uRandomness*0.95);
+    float randomPhase = uPatternShift * (0.32 + uRandomness*2.35);
+    float patternCell = floor(randomPhase);
+    float patternBlend = smoothstep(0.0,1.0,fract(randomPhase));
+    float patternRndA = hash11(patternCell*13.17 + sceneIndex*7.31 + uSceneSeed*5.19);
+    float patternRndB = hash11((patternCell+1.0)*13.17 + sceneIndex*7.31 + uSceneSeed*5.19);
+    float patternRnd2A = hash11(patternCell*4.91 + sceneIndex*11.73 + 8.2 + uSceneSeed*2.71);
+    float patternRnd2B = hash11((patternCell+1.0)*4.91 + sceneIndex*11.73 + 8.2 + uSceneSeed*2.71);
+    float patternRnd = mix(patternRndA,patternRndB,patternBlend);
+    float patternRnd2 = mix(patternRnd2A,patternRnd2B,patternBlend);
+    float randomRotation = (patternRnd-0.5) * uRandomness * (0.08 + 0.26*uMidPulse);
+    uv = rot(randomRotation) * uv;
+    float randomScale = 1.0 + (patternRnd2-0.5)*uRandomness*0.055;
+    uv *= randomScale;
+    float globalWarp = (0.0035 + uFlow*0.010) * (uMidPulse*0.50 + uTreblePulse*0.72 + uBeat*0.10 + uMidAtt*0.22 + uTrebleAtt*0.16 + uFlux*0.24) * (0.72 + patternRnd2*0.56);
+    globalWarp *= (0.16 + uRandomness*1.32);
     uv += vec2(
-      sin(uv.y*(3.6+patternRnd2*2.2) + t*(0.52+uFlow*0.20) + patternRnd*TAU),
-      cos(uv.x*(4.0+patternRnd*2.0) - t*(0.46+uFlow*0.20) - patternRnd2*TAU)
-    ) * globalWarp;
-    float reactiveZoom = 1.0 + uAudioZoom*(uBassPulse*0.075 + uSubPulse*0.045 + uBeat*0.025);
+      sin(uv.y*(3.6+patternRnd2*2.2) + t*(0.42+uFlow*0.18) + patternRnd*TAU),
+      cos(uv.x*(4.0+patternRnd*2.0) - t*(0.38+uFlow*0.18) - patternRnd2*TAU)
+    ) * globalWarp * (0.88 + uFrameRandom*0.24);
+    float reactiveZoom = 1.0 + uAudioZoom*(uBassPulse*0.075 + uSubPulse*0.045 + uBeat*0.025 + uBassAtt*0.028 + uSubAtt*0.018 + uFlux*0.020);
     uv /= reactiveZoom;
     uv *= 1.0 + uBassPulse * (0.010 + patternRnd*0.014) + uSubPulse*0.006;
 
     vec3 col = PRESET_CALL_PLACEHOLDER(uv, t);
 
-    float gate = smoothstep(0.026, 0.115, uLevel + uBeat*0.18 + uBass*0.07 + uLevelPulse*0.05);
+    float gate = smoothstep(0.026, 0.115, uLevel + uBeat*0.18 + uBass*0.07 + uLevelPulse*0.05 + uLevelAtt*0.11);
     float birth = smoothstep(0.0, 0.82, uGrowth);
-    float audioLift = mix(0.0, 0.58 + uLevel*0.42 + uBass*0.14 + uBeat*0.18 + uLevelPulse*0.10, gate);
+    float audioLift = mix(0.0, 0.55 + uLevel*0.38 + uBass*0.13 + uBeat*0.18 + uLevelPulse*0.10 + uLevelAtt*0.10, gate);
     vec3 bandAccent = vec3(0.0);
     bandAccent += palette(0.18 + uTime*0.02) * uBassPulse * 0.042;
     bandAccent += palette(0.46 + uTime*0.02) * uMidPulse * 0.036;
@@ -795,19 +1017,36 @@ const fallbackFragmentShader = `
   uniform float uLevel;
   uniform float uBeat;
   uniform float uIntensity;
+  uniform float uPreset;
+  uniform float uPatternShift;
+  uniform float uRandomness;
   uniform vec3 uColorA;
   uniform vec3 uColorB;
+  #define TAU 6.28318530718
+  float hash21(vec2 p){
+    p=fract(p*vec2(123.34,456.21));
+    p+=dot(p,p+45.32);
+    return fract(p.x*p.y);
+  }
+  mat2 rot(float a){ float c=cos(a),s=sin(a); return mat2(c,-s,s,c); }
   void main(){
     vec2 p=(vUv-0.5)*2.0;
+    float phase=fract(uPreset*0.173+uPatternShift*0.017);
+    p=rot((phase-0.5)*0.72+uTime*(0.025+uMid*0.035))*p;
     float r=length(p);
     float a=atan(p.y,p.x);
-    float ring=exp(-abs(r-(0.38+0.08*sin(uTime*0.8+a*3.0)))/(0.025+uBass*0.025));
-    float rays=pow(0.5+0.5*sin(a*8.0-uTime*(0.7+uMid)),8.0)*exp(-r*1.5);
-    float core=exp(-r*r*(7.0-uBass*2.0));
-    float pulse=0.35+uLevel*0.75+uBeat*0.35;
-    vec3 col=mix(uColorA,uColorB,0.5+0.5*sin(a*2.0+uTime*0.2+uTreble*2.0));
-    col*= (ring*0.7+rays*0.35+core*0.28)*pulse*uIntensity;
-    col=vec3(1.0)-exp(-max(col,vec3(0.0))*0.9);
+    float spokes=5.0+mod(floor(uPreset),7.0);
+    float ringRadius=0.34+0.10*sin(uTime*0.24+phase*TAU)+uBass*0.08;
+    float ring=exp(-abs(r-ringRadius)/(0.020+uBass*0.018));
+    float rays=pow(0.5+0.5*sin(a*spokes+r*(5.0+phase*6.0)-uTime*(0.20+uMid*0.25)),7.0)*exp(-r*1.25);
+    float orbit=exp(-abs(sin(r*(11.0+phase*7.0)-uTime*(0.36+uTreble*0.30)))/(0.065+uTreble*0.04))*0.13;
+    float grain=step(0.988-uRandomness*0.010,hash21(floor((p+1.0)*vec2(120.0,68.0))+uPreset))*0.45;
+    float core=exp(-r*r*(8.0-uBass*2.2));
+    float pulse=0.32+uLevel*0.95+uBeat*0.42;
+    float blend=0.5+0.5*sin(a*2.0+uTime*0.10+phase*TAU);
+    vec3 col=mix(uColorA,uColorB,blend);
+    col*= (ring*0.62+rays*0.34+orbit+core*0.22+grain)*pulse*uIntensity;
+    col=vec3(1.0)-exp(-max(col,vec3(0.0))*0.88);
     gl_FragColor=vec4(col,1.0);
   }
 `;
@@ -823,10 +1062,14 @@ const transitionFragmentShader = `
   uniform float uTransitionSeed;
   uniform float uTransitionActive;
   uniform float uTransitionZoom;
+  uniform float uSceneSeed;
+  uniform float uFrameRandom;
   uniform float uBassPulse;
   uniform float uMidPulse;
   uniform float uTreblePulse;
   uniform float uBeat;
+  uniform float uFlux;
+  uniform float uCentroid;
   #define PI 3.14159265359
   float hash21(vec2 p){
     p = fract(p * vec2(123.34, 456.21));
@@ -849,7 +1092,7 @@ const transitionFragmentShader = `
   mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
   float transitionField(vec2 p,float progress,float mode,float t){
     float e=smoothstep(0.0,1.0,progress);
-    float musical=uBassPulse*0.28+uMidPulse*0.20+uTreblePulse*0.18+uBeat*0.22;
+    float musical=uBassPulse*0.26+uMidPulse*0.18+uTreblePulse*0.16+uBeat*0.20+uFlux*0.22;
     float seed=uTransitionSeed*1.731;
     float n=fbm(p*(2.15+uTreblePulse*0.75)+vec2(seed,-seed*0.63)+vec2(t*0.045,-t*0.035));
     if(mode<0.5) return e;
@@ -867,7 +1110,7 @@ const transitionFragmentShader = `
       float prism=0.5+0.5*sin(a*6.0+length(p)*7.0-t*0.65+seed+uMidPulse*2.5);
       return smoothstep(0.0,0.16,e)*smoothstep(0.64-e*0.90,0.78-e*0.56,prism+e*0.55+n*0.14);
     }
-    float spiral=0.5+0.5*sin(atan(p.y,p.x)*4.0+length(p)*11.0-t*0.9-seed+uBeat*2.2);
+    float spiral=0.5+0.5*sin(atan(p.y,p.x)*(3.0+uCentroid*3.0)+length(p)*(9.0+uCentroid*5.0)-t*0.9-seed+uBeat*2.2);
     float field=mix(n,spiral,0.52+uMidPulse*0.18);
     return smoothstep(0.0,0.16,e)*smoothstep(0.73-e*0.98-musical*0.06,0.86-e*0.70+musical*0.04,field+e*0.48);
   }
@@ -888,6 +1131,74 @@ const transitionFragmentShader = `
   }
 `;
 
+
+const motionEchoShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uAmount: { value: 0.16 },
+    uWarp: { value: 0.18 },
+    uZoom: { value: 0.14 },
+    uBassAtt: { value: 0 },
+    uMidAtt: { value: 0 },
+    uTrebleAtt: { value: 0 },
+    uFlux: { value: 0 },
+    uCentroid: { value: 0.5 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform float uAmount;
+    uniform float uWarp;
+    uniform float uZoom;
+    uniform float uBassAtt;
+    uniform float uMidAtt;
+    uniform float uTrebleAtt;
+    uniform float uFlux;
+    uniform float uCentroid;
+
+    mat2 rot2(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+
+    void main(){
+      vec2 p=vUv-0.5;
+      float r=length(p);
+      float musical=uBassAtt*0.42+uMidAtt*0.38+uTrebleAtt*0.34+uFlux*0.28;
+      float twist=uWarp*(0.018+uMidAtt*0.026+uFlux*0.012)
+        *sin(r*(7.0+uCentroid*4.0)-uTime*0.23);
+      vec2 warped=rot2(twist)*p;
+      warped += vec2(
+        sin((p.y+uTime*0.035)*(8.0+uCentroid*3.0)),
+        cos((p.x-uTime*0.031)*(7.0+uCentroid*2.0))
+      ) * uWarp * (0.0015+musical*0.0028);
+
+      vec2 uv0=clamp(0.5+warped,vec2(0.001),vec2(0.999));
+      vec3 base=texture2D(tDiffuse,uv0).rgb;
+
+      float z1=1.0+uZoom*(0.020+uBassAtt*0.050+uFlux*0.022);
+      float z2=1.0+uZoom*(0.048+uTrebleAtt*0.030);
+      vec2 uv1=clamp(0.5+rot2(-twist*0.72)*p/z1,vec2(0.001),vec2(0.999));
+      vec2 uv2=clamp(0.5+rot2( twist*0.46)*p/z2,vec2(0.001),vec2(0.999));
+      vec3 echo1=texture2D(tDiffuse,uv1).rgb;
+      vec3 echo2=texture2D(tDiffuse,uv2).rgb;
+
+      float a=clamp(uAmount,0.0,1.0);
+      vec3 col=mix(base,max(base,echo1*0.90),a*0.52);
+      col+=echo2*(a*0.075)*(0.65+musical*0.45);
+      gl_FragColor=vec4(col,1.0);
+    }
+  `
+};
+
+
 const QUALITY_SCALE = {
   performance: 0.72,
   high: 0.96,
@@ -895,6 +1206,10 @@ const QUALITY_SCALE = {
 };
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const hashNumber = (x) => {
+  const v = Math.sin(x * 12.9898 + 78.233) * 43758.5453;
+  return v - Math.floor(v);
+};
 
 export class VisualEngine {
   constructor(container, options = {}) {
@@ -927,7 +1242,10 @@ export class VisualEngine {
     this.lastFrameTime = performance.now();
     this.patternShift = 0;
     this.lastBeatFrame = 0;
+    this.lastFluxFrame = 0;
+    this.lastFluxMutationAt = 0;
     this.logoSpinAngle = 0;
+    this.lastLogoResetSpin = 0;
     this.currentPreset = 0;
     this.targetPreset = 0;
     this.presetInitialized = false;
@@ -938,6 +1256,17 @@ export class VisualEngine {
     this.randomness = 0.48;
     this.flow = 0.58;
     this.audioZoom = 0.62;
+    this.feedback = 0.18;
+    this.memoryWarp = 0.20;
+    this.echoZoom = 0.16;
+    this.waveformMode = 'off';
+    this.waveformGain = 0.72;
+    this.waveformVisible = false;
+    this.sceneSeed = 0.314159;
+    this.frameRandom = 0.5;
+    this.frameRandomTarget = 0.5;
+    this.treeGrowth = 0.28;
+    this.treeGrowthVelocity = 0;
     this.adaptiveQuality = true;
     this.adaptiveScale = 1.0;
     this.performanceFrames = 0;
@@ -988,11 +1317,15 @@ export class VisualEngine {
       const vertexLog = gl.getShaderInfoLog(vertexShaderObject) || '';
       const fragmentLog = gl.getShaderInfoLog(fragmentShaderObject) || '';
       console.error('AudioReactive shader error', { preset: this.activeRenderingPreset, vertexLog, fragmentLog });
-      if (Number.isInteger(this.activeRenderingPreset)) this.failedPresets.add(this.activeRenderingPreset);
-      this.errorOverlay.style.display = 'flex';
-      this.errorOverlay.textContent = Number.isInteger(this.activeRenderingPreset)
-        ? `Preset ${this.activeRenderingPreset + 1} fallback activo · revisá consola`
-        : 'Visual pipeline fallback activo · revisá consola';
+      if (Number.isInteger(this.activeRenderingPreset)) {
+        this.failedPresets.add(this.activeRenderingPreset);
+        console.warn(`Preset ${this.activeRenderingPreset + 1} switched to compatibility renderer.`);
+      }
+      // A live-performance app must never cover the output with an error panel.
+      // Shader diagnostics remain available in DevTools while a lightweight compatibility
+      // material takes over automatically on the next frame.
+      this.errorOverlay.style.display = 'none';
+      this.errorOverlay.textContent = '';
       this.errorOverlay.title = `${vertexLog}
 ${fragmentLog}`;
     };
@@ -1007,6 +1340,13 @@ ${fragmentLog}`;
       uTreble: { value: 0 },
       uLevel: { value: 0 },
       uBeat: { value: 0 },
+      uSubAtt: { value: 0 },
+      uBassAtt: { value: 0 },
+      uMidAtt: { value: 0 },
+      uTrebleAtt: { value: 0 },
+      uLevelAtt: { value: 0 },
+      uFlux: { value: 0 },
+      uCentroid: { value: 0.5 },
       uIntensity: { value: 1.08 },
       uContrast: { value: 1.1 },
       uZoom: { value: 1 },
@@ -1031,6 +1371,9 @@ ${fragmentLog}`;
       uFlow: { value: 0.58 },
       uAudioZoom: { value: 0.62 },
       uTransitionZoom: { value: 0.55 },
+      uSceneSeed: { value: 0.314159 },
+      uFrameRandom: { value: 0.5 },
+      uTreeGrowth: { value: 0.28 },
       uColorA: { value: new THREE.Color('#6c4cff') },
       uColorB: { value: new THREE.Color('#00d9ff') }
     };
@@ -1074,7 +1417,9 @@ ${fragmentLog}`;
       uBassPulse: this.uniforms.uBassPulse,
       uMidPulse: this.uniforms.uMidPulse,
       uTreblePulse: this.uniforms.uTreblePulse,
-      uBeat: this.uniforms.uBeat
+      uBeat: this.uniforms.uBeat,
+      uFlux: this.uniforms.uFlux,
+      uCentroid: this.uniforms.uCentroid
     };
     this.transitionMaterial = new THREE.ShaderMaterial({
       vertexShader,
@@ -1092,6 +1437,14 @@ ${fragmentLog}`;
     this.composer = null;
     this.renderPass = null;
     this.bloomPass = null;
+    this.afterimagePass = null;
+    this.motionEchoPass = null;
+
+    // Lightweight audio waveform overlay with multiple procedural drawing modes.
+    this.waveformCanvas = document.createElement('canvas');
+    this.waveformCanvas.className = 'visual-waveform-layer';
+    this.waveformCtx = this.waveformCanvas.getContext('2d', { alpha: true });
+    this.container.appendChild(this.waveformCanvas);
 
     this.logoWrap = document.createElement('div');
     this.logoWrap.className = 'visual-logo-layer';
@@ -1136,6 +1489,7 @@ ${fragmentLog}`;
   renderPresetToTarget(index, target) {
     const key = clamp(Math.round(index), 0, PRESET_DEFINITIONS.length - 1);
     this.activeRenderingPreset = key;
+    this.uniforms.uSceneSeed.value = hashNumber((key + 1) * 19.73);
     this.presetMesh.material = this.failedPresets.has(key) ? this.fallbackMaterial : this.getPresetMaterial(key);
     this.renderer.setRenderTarget(target);
     this.renderer.clear();
@@ -1154,8 +1508,15 @@ ${fragmentLog}`;
       0.25
     );
     this.updateBloomSettings();
+    this.motionEchoPass = new ShaderPass(motionEchoShader);
+    this.motionEchoPass.enabled = this.quality !== 'performance' && (this.memoryWarp > 0.001 || this.echoZoom > 0.001);
+    this.afterimagePass = new AfterimagePass(0.90);
+    this.afterimagePass.enabled = this.feedback > 0.001 && this.quality !== 'performance';
     this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.motionEchoPass);
     this.composer.addPass(this.bloomPass);
+    this.composer.addPass(this.afterimagePass);
+    this.updateFeedbackSettings();
   }
 
   async prepare(options = {}) {
@@ -1169,6 +1530,15 @@ ${fragmentLog}`;
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       this.presetMesh.material = this.getPresetMaterial(this.currentPreset);
       this.setupPostProcessing();
+      this.activeRenderingPreset = null;
+      // Warm the post stack once without associating compiler diagnostics with a preset.
+      // This keeps later preset switching deterministic and avoids false compatibility fallbacks.
+      if (this.composer) {
+        const originalScene = this.renderPass?.scene;
+        if (this.renderPass) this.renderPass.scene = this.blendScene;
+        try { this.composer.render(0); } catch (error) { console.warn('Post stack warmup skipped:', error); }
+        if (this.renderPass && originalScene) this.renderPass.scene = originalScene;
+      }
       this.applyPixelRatio();
       this.resize(true);
       this.prepared = true;
@@ -1211,12 +1581,171 @@ ${fragmentLog}`;
     this.bloomPass.threshold = this.quality === 'performance' ? 0.29 : 0.25;
   }
 
+  updateFeedbackSettings() {
+    const perf = this.quality === 'performance';
+    if (this.afterimagePass) {
+      const enabled = this.feedback > 0.001 && !perf;
+      this.afterimagePass.enabled = enabled;
+      if (enabled) {
+        const macro = this.uniforms?.uLevelAtt?.value ?? 0;
+        const damp = clamp(0.70 + this.feedback * 0.27 + macro * this.feedback * 0.015, 0.70, 0.985);
+        if (this.afterimagePass.uniforms?.damp) this.afterimagePass.uniforms.damp.value = damp;
+      }
+    }
+    if (this.motionEchoPass) {
+      const enabled = !perf && (this.memoryWarp > 0.001 || this.echoZoom > 0.001);
+      this.motionEchoPass.enabled = enabled;
+      if (enabled) {
+        const u = this.motionEchoPass.uniforms;
+        if (u.uAmount) u.uAmount.value = clamp(this.feedback * 0.76 + this.memoryWarp * 0.16, 0, 1);
+        if (u.uWarp) u.uWarp.value = this.memoryWarp;
+        if (u.uZoom) u.uZoom.value = this.echoZoom;
+        if (u.uTime) u.uTime.value = this.timePhase;
+        if (u.uBassAtt) u.uBassAtt.value = this.uniforms.uBassAtt.value;
+        if (u.uMidAtt) u.uMidAtt.value = this.uniforms.uMidAtt.value;
+        if (u.uTrebleAtt) u.uTrebleAtt.value = this.uniforms.uTrebleAtt.value;
+        if (u.uFlux) u.uFlux.value = this.uniforms.uFlux.value;
+        if (u.uCentroid) u.uCentroid.value = this.uniforms.uCentroid.value;
+      }
+    }
+  }
+
+  resizeWaveformCanvas() {
+    if (!this.waveformCanvas) return;
+    const w = Math.max(1, this.container.clientWidth);
+    const h = Math.max(1, this.container.clientHeight);
+    const maxW = this.isOutput ? 1600 : 1200;
+    const scale = Math.min(1.25, window.devicePixelRatio || 1, maxW / w);
+    const rw = Math.max(1, Math.round(w * scale));
+    const rh = Math.max(1, Math.round(h * scale));
+    if (this.waveformCanvas.width !== rw || this.waveformCanvas.height !== rh) {
+      this.waveformCanvas.width = rw;
+      this.waveformCanvas.height = rh;
+    }
+  }
+
+  updateWaveform() {
+    const ctx = this.waveformCtx;
+    const canvas = this.waveformCanvas;
+    if (!ctx || !canvas) return;
+    const data = this.lastState?.waveform;
+    const level = this.uniforms.uLevel.value;
+    const shouldDraw = this.waveformMode !== 'off' && Array.isArray(data) && data.length >= 4 && level >= 0.012;
+    if (!shouldDraw) {
+      if (this.waveformVisible) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        this.waveformVisible = false;
+      }
+      return;
+    }
+    this.waveformVisible = true;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const w = canvas.width, h = canvas.height;
+    const a = this.lastState?.colorA || '#6c4cff';
+    const b = this.lastState?.colorB || '#00d9ff';
+    const gradient = ctx.createLinearGradient(0, 0, w, h);
+    gradient.addColorStop(0, a);
+    gradient.addColorStop(1, b);
+    ctx.strokeStyle = gradient;
+    ctx.globalAlpha = clamp(0.22 + level * 0.85, 0, 0.88);
+    ctx.lineWidth = Math.max(1.0, Math.min(w, h) * 0.0022);
+    ctx.shadowBlur = Math.max(3, Math.min(w, h) * 0.016);
+    ctx.shadowColor = b;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    const wMin = Math.min(w, h);
+    const cx = w * 0.5, cy = h * 0.5;
+    const bass = this.uniforms.uBassAtt.value;
+    const mid = this.uniforms.uMidAtt.value;
+    const treble = this.uniforms.uTrebleAtt.value;
+    const flux = this.uniforms.uFlux.value;
+    const centroid = this.uniforms.uCentroid.value;
+
+    const strokePath = (builder, alphaScale = 1) => {
+      ctx.save();
+      ctx.globalAlpha *= alphaScale;
+      ctx.beginPath();
+      builder();
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    if (this.waveformMode === 'radial' || this.waveformMode === 'flower') {
+      const baseR = wMin * (0.18 + bass * 0.05);
+      const petals = 5 + Math.round(centroid * 6);
+      strokePath(() => {
+        for (let i = 0; i <= data.length; i++) {
+          const idx = i % data.length;
+          const angle = (i / data.length) * Math.PI * 2 - Math.PI / 2;
+          const petal = this.waveformMode === 'flower'
+            ? Math.sin(angle * petals + this.timePhase * 0.45) * baseR * (0.08 + mid * 0.08)
+            : 0;
+          const amp = data[idx] * baseR * (0.38 + treble * 0.10) * this.waveformGain;
+          const r = baseR + amp + petal;
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+      });
+    } else if (this.waveformMode === 'lasso' || this.waveformMode === 'spiro') {
+      const scale = wMin * (0.20 + bass * 0.045);
+      const turns = this.waveformMode === 'spiro' ? 3.0 + centroid * 4.0 : 1.55 + centroid * 1.6;
+      strokePath(() => {
+        data.forEach((v, i) => {
+          const u = i / Math.max(1, data.length - 1);
+          const phase = u * Math.PI * 2;
+          const wobble = v * this.waveformGain;
+          const x = cx + Math.sin(phase * turns + wobble * 0.7) * scale * (0.78 + wobble * 0.18);
+          const y = cy + Math.sin(phase * (turns + 1.0) + this.timePhase * 0.16) * scale * (0.70 + Math.abs(wobble) * 0.24);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+      });
+    } else if (this.waveformMode === 'double') {
+      const amp = h * 0.16 * this.waveformGain;
+      [-1, 1].forEach((sign, pass) => {
+        strokePath(() => {
+          const midY = h * (pass === 0 ? 0.43 : 0.57);
+          data.forEach((v, i) => {
+            const x = (i / (data.length - 1)) * w;
+            const y = midY + v * amp * sign;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+        }, 0.72);
+      });
+    } else {
+      const midY = h * 0.5;
+      const amp = h * 0.22 * this.waveformGain;
+      strokePath(() => {
+        data.forEach((v, i) => {
+          const x = (i / (data.length - 1)) * w;
+          const y = midY + v * amp;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+      });
+    }
+
+    if (flux > 0.18) {
+      ctx.save();
+      ctx.globalAlpha = clamp(flux * 0.25, 0, 0.18);
+      ctx.beginPath();
+      ctx.arc(cx, cy, wMin * (0.10 + flux * 0.08), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  }
+
   setQuality(quality) {
     if (!QUALITY_SCALE[quality] || quality === this.quality) return;
     this.quality = quality;
     this.adaptiveScale = Math.min(1, this.adaptiveScale);
     this.applyPixelRatio();
     this.updateBloomSettings();
+    this.updateFeedbackSettings();
     this.resize(true);
   }
 
@@ -1298,6 +1827,13 @@ ${fragmentLog}`;
     if (state.midPulse != null) u.uMidPulse.value = Math.max(state.midPulse, u.uMidPulse.value * 0.86);
     if (state.treblePulse != null) u.uTreblePulse.value = Math.max(state.treblePulse, u.uTreblePulse.value * 0.84);
     if (state.levelPulse != null) u.uLevelPulse.value = Math.max(state.levelPulse, u.uLevelPulse.value * 0.87);
+    if (state.subAtt != null) u.uSubAtt.value += (state.subAtt - u.uSubAtt.value) * 0.22;
+    if (state.bassAtt != null) u.uBassAtt.value += (state.bassAtt - u.uBassAtt.value) * 0.22;
+    if (state.midAtt != null) u.uMidAtt.value += (state.midAtt - u.uMidAtt.value) * 0.20;
+    if (state.trebleAtt != null) u.uTrebleAtt.value += (state.trebleAtt - u.uTrebleAtt.value) * 0.20;
+    if (state.levelAtt != null) u.uLevelAtt.value += (state.levelAtt - u.uLevelAtt.value) * 0.22;
+    if (state.flux != null) u.uFlux.value += (state.flux - u.uFlux.value) * 0.30;
+    if (state.centroid != null) u.uCentroid.value += (state.centroid - u.uCentroid.value) * 0.18;
 
     const signal = Math.max(u.uLevel.value, u.uBeat.value * 0.7, u.uBass.value * 0.55);
     const targetGrowth = signal > 0.045 ? Math.min(1, signal * 1.78 + 0.10) : 0;
@@ -1317,6 +1853,11 @@ ${fragmentLog}`;
     if (state.randomness != null) { this.randomness = clamp(Number(state.randomness), 0, 1); u.uRandomness.value = this.randomness; }
     if (state.flow != null) { this.flow = clamp(Number(state.flow), 0, 1.5); u.uFlow.value = this.flow; }
     if (state.audioZoom != null) { this.audioZoom = clamp(Number(state.audioZoom), 0, 1.5); u.uAudioZoom.value = this.audioZoom; }
+    if (state.feedback != null) { this.feedback = clamp(Number(state.feedback), 0, 1); this.updateFeedbackSettings(); }
+    if (state.memoryWarp != null) { this.memoryWarp = clamp(Number(state.memoryWarp), 0, 1.5); this.updateFeedbackSettings(); }
+    if (state.echoZoom != null) { this.echoZoom = clamp(Number(state.echoZoom), 0, 1.5); this.updateFeedbackSettings(); }
+    if (state.waveformMode != null) this.waveformMode = String(state.waveformMode);
+    if (state.waveformGain != null) this.waveformGain = clamp(Number(state.waveformGain), 0, 1.5);
     if (state.adaptiveQuality != null) this.setAdaptiveQuality(state.adaptiveQuality);
     if (state.preset != null) this.queuePreset(Number(state.preset));
     if (state.colorA) u.uColorA.value.set(state.colorA);
@@ -1344,6 +1885,10 @@ ${fragmentLog}`;
     if (state.logoFxBlink != null) this.logoFxBlink = Boolean(state.logoFxBlink);
     if (state.logoFxPulse != null) this.logoFxPulse = Boolean(state.logoFxPulse);
     if (state.logoFxSpin != null) this.logoFxSpin = Boolean(state.logoFxSpin);
+    if (state.logoResetSpin != null && Number(state.logoResetSpin) !== this.lastLogoResetSpin) {
+      this.lastLogoResetSpin = Number(state.logoResetSpin);
+      this.logoSpinAngle = 0;
+    }
     if (state.logoFxColor != null) this.logoFxColor = Boolean(state.logoFxColor);
     if (state.logoDataUrl !== undefined && state.logoDataUrl !== this.logoDataUrl) this.setLogo(state.logoDataUrl);
     else if (logoCopiesChanged) this.ensureLogoNodes();
@@ -1360,7 +1905,7 @@ ${fragmentLog}`;
   }
 
   queuePreset(nextPreset) {
-    const next = clamp(Math.round(nextPreset), 0, 18);
+    const next = clamp(Math.round(nextPreset), 0, PRESET_DEFINITIONS.length - 1);
     if (!this.presetInitialized) {
       this.presetInitialized = true;
       this.currentPreset = next;
@@ -1380,7 +1925,7 @@ ${fragmentLog}`;
   }
 
   startPresetTransition(nextPreset, now = performance.now()) {
-    const next = clamp(Math.round(nextPreset), 0, 18);
+    const next = clamp(Math.round(nextPreset), 0, PRESET_DEFINITIONS.length - 1);
     if (this.transitionActive && this.uniforms.uTransitionMix.value > 0.55) this.currentPreset = this.targetPreset;
     this.targetPreset = next;
     this.transitionActive = this.currentPreset !== this.targetPreset;
@@ -1431,6 +1976,7 @@ ${fragmentLog}`;
     this.containerWidth = width;
     this.containerHeight = height;
     this.renderer.setSize(width, height, false);
+    this.resizeWaveformCanvas();
     const ratio = this.renderer.getPixelRatio();
     const targetW = Math.max(1, Math.round(width * ratio));
     const targetH = Math.max(1, Math.round(height * ratio));
@@ -1608,19 +2154,65 @@ ${fragmentLog}`;
     this.updatePerformance(dt, now);
 
     this.displaySpeed += (this.targetSpeed - this.displaySpeed) * Math.min(1, dt * 8.0);
-    const speedCurve = Math.pow(Math.max(0.01, this.displaySpeed), 0.92);
+    // Expressive temporal curve around the 0.88 neutral point. Very low values now
+    // genuinely approach slow motion while the phase remains continuous (no jumps).
+    const neutralSpeed = 0.88;
+    const normalizedSpeed = Math.max(0.01, this.displaySpeed / neutralSpeed);
+    const speedCurve = clamp(neutralSpeed * Math.pow(normalizedSpeed, 1.42), 0.0035, 3.85);
     this.timePhase += dt * speedCurve;
     this.uniforms.uTime.value = this.timePhase;
     this.uniforms.uSpeed.value = this.displaySpeed;
+
+    // Tree growth integrates musical energy over time instead of merely scaling a static shape.
+    // Sustained spectral energy grows the crown; quiet passages pull the branches back to the trunk.
+    const treeVisible = this.currentPreset === 18 || this.targetPreset === 18 ||
+      (this.transitionActive && (Math.round(this.uniforms.uPresetFrom.value) === 18 || Math.round(this.uniforms.uPresetTo.value) === 18));
+    const treeDrive = clamp(
+      this.uniforms.uBassAtt.value * 0.34 +
+      this.uniforms.uMidAtt.value * 0.56 +
+      this.uniforms.uTrebleAtt.value * 0.94 +
+      this.uniforms.uFlux.value * 0.40 +
+      this.uniforms.uTreblePulse.value * 0.20,
+      0, 1.8
+    );
+    if (treeVisible) {
+      const grow = Math.max(0, treeDrive - 0.16);
+      const retract = Math.max(0, 0.20 - treeDrive);
+      const targetVelocity = grow > 0
+        ? 0.16 + grow * (0.52 + this.randomness * 0.18)
+        : -(0.22 + retract * 1.35);
+      this.treeGrowthVelocity += (targetVelocity - this.treeGrowthVelocity) * Math.min(1, dt * 3.2);
+      this.treeGrowth = clamp(this.treeGrowth + this.treeGrowthVelocity * dt, 0.0, 10.0);
+    } else {
+      // Reset off-screen so every return to the tree begins from a recognisable trunk/crown base.
+      this.treeGrowthVelocity *= Math.max(0, 1 - dt * 4.0);
+      this.treeGrowth += (0.26 - this.treeGrowth) * Math.min(1, dt * 1.8);
+    }
+    this.uniforms.uTreeGrowth.value = this.treeGrowth;
+
     this.updateTransition(now);
 
     const beatNow = this.uniforms.uBeat.value > 0.88 && this.lastBeatFrame <= 0.88;
     if (beatNow) {
-      this.patternShift += (0.26 + this.randomness*0.72) * (0.62 + this.uniforms.uBassPulse.value * 0.95 + this.uniforms.uMidPulse.value * 0.48 + this.uniforms.uTreblePulse.value * 0.62);
+      this.frameRandomTarget = hashNumber(this.patternShift + this.currentPreset * 17.13 + now * 0.0001);
+      // Randomness controls coherent scene mutations; transients can also create
+      // smaller secondary decisions without turning the image into white noise.
+      this.patternShift += (0.045 + this.randomness*1.34) * (0.58 + this.uniforms.uBassPulse.value * 0.92 + this.uniforms.uMidPulse.value * 0.58 + this.uniforms.uTreblePulse.value * 0.72);
     }
     this.lastBeatFrame = this.uniforms.uBeat.value;
+    const fluxNow = this.uniforms.uFlux.value;
+    const fluxHit = fluxNow > 0.42 && this.lastFluxFrame <= 0.42 && now - this.lastFluxMutationAt > 140;
+    if (fluxHit) {
+      this.lastFluxMutationAt = now;
+      this.patternShift += (0.018 + this.randomness * 0.30) * (0.55 + fluxNow);
+      this.frameRandomTarget = hashNumber(this.patternShift * 1.7 + this.currentPreset * 9.31 + now * 0.00017);
+    }
+    this.lastFluxFrame = fluxNow;
+    this.frameRandom += (this.frameRandomTarget - this.frameRandom) * Math.min(1, dt * (0.8 + this.randomness * 4.2));
+    this.uniforms.uFrameRandom.value = this.frameRandom;
+    this.uniforms.uSceneSeed.value = this.sceneSeed;
     const signalFlow = clamp((this.uniforms.uLevel.value - 0.025) * 7.0, 0, 1);
-    this.patternShift += dt * signalFlow * (0.012 + this.randomness*0.040 + this.uniforms.uMidPulse.value * 0.08 + this.uniforms.uTreblePulse.value * 0.035);
+    this.patternShift += dt * signalFlow * (0.0025 + this.randomness*0.082 + this.uniforms.uMidPulse.value * (0.025+this.randomness*0.070) + this.uniforms.uTreblePulse.value * (0.012+this.randomness*0.040) + this.uniforms.uFlux.value*(0.012+this.randomness*0.036));
     this.uniforms.uPatternShift.value += (this.patternShift - this.uniforms.uPatternShift.value) * Math.min(1, dt * 3.2);
 
     if (this.logoFxSpin) {
@@ -1633,9 +2225,17 @@ ${fragmentLog}`;
     this.uniforms.uMidPulse.value *= 0.89;
     this.uniforms.uTreblePulse.value *= 0.87;
     this.uniforms.uLevelPulse.value *= 0.90;
+    const macroDecay = this.uniforms.uLevel.value < 0.015 ? 0.965 : 0.9995;
+    this.uniforms.uSubAtt.value *= macroDecay;
+    this.uniforms.uBassAtt.value *= macroDecay;
+    this.uniforms.uMidAtt.value *= macroDecay;
+    this.uniforms.uTrebleAtt.value *= macroDecay;
+    this.uniforms.uLevelAtt.value *= macroDecay;
 
     this.updateLogos(this.timePhase);
     this.updateRunes(this.timePhase, dt);
+    this.updateFeedbackSettings();
+    this.updateWaveform();
 
     if (this.transitionActive) {
       // Two compact preset shaders are evaluated only during the transition.
@@ -1651,6 +2251,8 @@ ${fragmentLog}`;
       // Fast path: one preset shader + bloom. No extra render-target copy.
       const key = clamp(Math.round(this.currentPreset), 0, PRESET_DEFINITIONS.length - 1);
       this.activeRenderingPreset = key;
+      this.sceneSeed = hashNumber((key + 1) * 19.73);
+      this.uniforms.uSceneSeed.value = this.sceneSeed;
       this.presetMesh.material = this.failedPresets.has(key) ? this.fallbackMaterial : this.getPresetMaterial(key);
       this.renderer.setRenderTarget(null);
       if (this.renderPass) this.renderPass.scene = this.presetScene;

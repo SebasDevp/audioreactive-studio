@@ -95,6 +95,8 @@ const state = {
   treble: 0,
   level: 0,
   beat: 0,
+  flux: 0,
+  centroid: 0.5,
   preset: 10,
   intensity: 1.06,
   contrast: 1.08,
@@ -105,6 +107,11 @@ const state = {
   randomness: 0.48,
   flow: 0.58,
   audioZoom: 0.62,
+  feedback: 0.18,
+  memoryWarp: 0.20,
+  echoZoom: 0.16,
+  waveformMode: 'off',
+  waveformGain: 0.72,
   adaptiveQuality: true,
   colorA: '#6c4cff',
   colorB: '#00d9ff',
@@ -127,6 +134,7 @@ const state = {
   logoFxPulse: false,
   logoFxSpin: false,
   logoFxColor: false,
+  logoResetSpin: 0,
   logoColorMode: 'original',
   logoBlendMode: 'normal',
   logoGlow: 0.22,
@@ -413,7 +421,11 @@ $('captureSystem').addEventListener('click', async () => {
 $('stopAudio').addEventListener('click', () => {
   audio.stop();
   audioConnected = false;
-  Object.assign(state, { sub: 0, bass: 0, mid: 0, treble: 0, level: 0, beat: 0, subPulse: 0, bassPulse: 0, midPulse: 0, treblePulse: 0, levelPulse: 0 });
+  Object.assign(state, {
+    sub: 0, bass: 0, mid: 0, treble: 0, level: 0, beat: 0, flux: 0, centroid: 0.5,
+    subPulse: 0, bassPulse: 0, midPulse: 0, treblePulse: 0, levelPulse: 0,
+    subAtt: 0, bassAtt: 0, midAtt: 0, trebleAtt: 0, levelAtt: 0, waveform: []
+  });
   updateMeters(state);
   setStatus('Audio desconectado', 'Elegí una entrada, ventana o el audio del sistema.', 'idle');
   $('reactionLabel').textContent = 'WAITING FOR SIGNAL';
@@ -451,6 +463,14 @@ $('adaptiveQuality')?.addEventListener('change', (event) => {
   });
 });
 
+$('logoResetRotation')?.addEventListener('click', () => {
+  state.logoFxSpin = false;
+  state.logoResetSpin = (Number(state.logoResetSpin) || 0) + 1;
+  if ($('logoFxSpin')) $('logoFxSpin').checked = false;
+  persistOverlaySettings();
+  broadcast(true);
+});
+
 const bindings = [
   ['preset', 'preset', true],
   ['intensity', 'intensity', true],
@@ -462,6 +482,11 @@ const bindings = [
   ['randomness', 'randomness', true],
   ['flow', 'flow', true],
   ['audioZoom', 'audioZoom', true],
+  ['feedback', 'feedback', true],
+  ['memoryWarp', 'memoryWarp', true],
+  ['echoZoom', 'echoZoom', true],
+  ['waveformGain', 'waveformGain', true],
+  ['waveformMode', 'waveformMode', false],
   ['colorMix', 'colorMix', true],
   ['transitionSpeed', 'transitionSpeed', true],
   ['transitionZoom', 'transitionZoom', true],
@@ -534,8 +559,10 @@ window.addEventListener('keydown', (event) => {
   const presetMap = {
     '1': 0, '2': 1, '3': 2, '4': 3, '5': 4,
     '6': 5, '7': 6, '8': 7, '9': 8, '0': 9,
-    q: 10, w: 11, e: 12, r: 13, t: 14, y: 15, u: 16, i: 17, o: 18,
-    Q: 10, W: 11, E: 12, R: 13, T: 14, Y: 15, U: 16, I: 17, O: 18
+    q: 10, w: 11, e: 12, r: 13, t: 14, y: 15, u: 16, i: 17, o: 18, p: 19,
+    a: 20, s: 21, d: 22, f: 23,
+    Q: 10, W: 11, E: 12, R: 13, T: 14, Y: 15, U: 16, I: 17, O: 18, P: 19,
+    A: 20, S: 21, D: 22, F: 23
   };
   if (presetMap[event.key] != null) {
     $('preset').value = String(presetMap[event.key]);
@@ -698,7 +725,7 @@ function setupPlatformUi() {
   setStatus('Modo web listo', 'Para YouTube: elegí una pestaña de Chrome y activá “Compartir audio”.', 'active');
 }
 
-// Boot sequence v0.11: UI first, renderer second. Nothing may block interaction.
+// Boot sequence v0.14: UI first, renderer second. Nothing may block interaction.
 const bootStartedAt = performance.now();
 const BOOT_MIN_MS = 620;
 const BOOT_FAILSAFE_MS = 1500;
@@ -720,18 +747,19 @@ try {
 }
 
 [
-  'preset','intensity','contrast','speed','zoom','density','bloom','randomness','flow','audioZoom','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'
+  'preset','intensity','contrast','speed','zoom','density','bloom','randomness','flow','audioZoom','feedback','memoryWarp','echoZoom','waveformGain','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'
 ].forEach((id) => { if ($(id)) $(id).value = String(state[id]); });
 if ($('quality')) $('quality').value = state.quality;
 if ($('transitionMode')) $('transitionMode').value = state.transitionMode;
 if ($('transitionSync')) $('transitionSync').checked = Boolean(state.transitionSync);
 if ($('adaptiveQuality')) $('adaptiveQuality').checked = Boolean(state.adaptiveQuality);
 if ($('logoMode')) $('logoMode').value = state.logoMode;
+if ($('waveformMode')) $('waveformMode').value = state.waveformMode;
 if ($('logoColorMode')) $('logoColorMode').value = state.logoColorMode;
 if ($('logoBlendMode')) $('logoBlendMode').value = state.logoBlendMode;
 ['logoFxBlink','logoFxPulse','logoFxSpin','logoFxColor'].forEach((id)=>{ if ($(id)) $(id).checked = Boolean(state[id]); });
 if ($('inputGainValue') && $('inputGain')) $('inputGainValue').textContent = `${Number($('inputGain').value).toFixed(2)}×`;
-['intensity','contrast','speed','zoom','density','bloom','randomness','flow','audioZoom','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'].forEach((id)=>{
+['intensity','contrast','speed','zoom','density','bloom','randomness','flow','audioZoom','feedback','memoryWarp','echoZoom','waveformGain','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'].forEach((id)=>{
   if ($(`${id}Value`)) {
     const decimals = ['logoCopies','transitionSpeed'].includes(id) ? 0 : 2;
     $(`${id}Value`).textContent = Number(state[id]).toFixed(decimals);

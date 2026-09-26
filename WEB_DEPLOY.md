@@ -1,20 +1,17 @@
-# Deploy Web · AudioReactive Studio v0.11.1
+# AudioReactive Studio v0.14.1 · Web deploy
 
-La versión web está optimizada para carga progresiva: la interfaz entra primero y el motor Three.js/shader se solicita después. Los assets con hash generados por Vite pueden ser cacheados por Cloudflare.
-
-## Cloudflare Pages
-
-- Production branch: `main`
+Cloudflare Pages settings:
+- Branch: `main`
 - Build command: `npm run build:web`
 - Build output directory: `dist`
-- Root directory: vacío
 
-## Publicar
+After replacing the project files:
 
-```bash
+```powershell
+npm run build:web
 git add .
-git commit -m "AudioReactive Studio v0.11.1 fast boot"
-git push
+git commit -m "AudioReactive Studio v0.14 Living Systems"
+git push origin main
 ```
 
-Cloudflare Pages reconstruirá el proyecto automáticamente.
+Cloudflare will deploy automatically from `main`.

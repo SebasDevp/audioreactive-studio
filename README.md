@@ -1,59 +1,52 @@
-# AudioReactive Studio v0.11.3 · SebasDevp
+# AudioReactive Studio v0.14.1 · Stable Living Engine
 
-Versión de estabilidad del motor visual. Mantiene los 19 mundos, Personality Engine, transiciones generativas, overlays, Vegvísir, OUTPUT y Auto FPS, pero cambia la arquitectura GPU para evitar previews negros y compilaciones monolíticas.
+AudioReactive Studio is a desktop/web audiovisual performance instrument by SebasDevp.
 
-## Cambio principal: Modular GPU Engine
+## Highlights in v0.14
+- 24 modular generative worlds.
+- Rebuilt **Tree of Life · Living Tendrils** with a strong trunk, roots and long frequency-driven branches that retract when musical energy falls and extend far beyond the viewport during sustained highs.
+- Re-timed **Matrix Rain** so very low speed values genuinely suspend the falling code.
+- New internal spectral metrics: **flux** and **centroid** for more musical mutation and direction.
+- New spatial memory stage with **trails**, **memory warp** and **echo zoom**.
+- Expanded audio waveform modes: Line, Double Line, Radial, Flower, Lasso and Spiro.
+- Five new scenes:
+  - Aurora Veil
+  - Feedback Cathedral
+  - Mycelium Network
+  - Luminous Vortex
+  - Spectral Spirograph
+- Adaptive render resolution remains enabled in HD mode for stable FPS.
+- Modular shader compilation keeps one bad preset from taking down the entire engine.
 
-Antes todos los presets vivían dentro de un único fragment shader enorme. En algunas GPUs/Chromium eso podía compilar lentamente o directamente dejar el preview negro.
-
-Ahora:
-
-- cada preset tiene su propio shader compacto;
-- en estado normal se renderiza **un solo preset + bloom**;
-- durante una transición se renderizan sólo **dos presets** y un shader de mezcla;
-- si un preset particular falla al compilar, activa un fallback audio-reactivo sin tumbar el resto del motor;
-- no se espera una compilación gigante durante el arranque.
-
-## Presets
-
-1. Cosmic Particles
-2. Neon Flow
-3. Sacred Dust
-4. Angelic Particles
-5. Techno Tunnel
-6. Quantum Dust
-7. Fibonacci Bloom
-8. Rune Pulse · Vegvísir
-9. Symbol Forge
-10. Seed World
-11. Flower of Life Nexus
-12. Artifact Shrine
-13. Entity Gate
-14. Dynamic Panels
-15. Matrix Rain
-16. Merkaba Prism
-17. Liquid Resonance
-18. Galactic Bloom
-19. Frequency Tree
-
-## Arranque
-
-```bash
+## Run desktop
+```powershell
 npm run dev
 ```
 
-Web:
-
-```bash
+## Run web
+```powershell
 npm run dev:web
 ```
 
-Build Cloudflare:
-
-```bash
+## Build web
+```powershell
 npm run build:web
 ```
 
-## Actualización
+Cloudflare Pages:
+- Build command: `npm run build:web`
+- Output directory: `dist`
 
-Copiá el contenido de esta carpeta sobre el proyecto actual. Conservá `.git`, `node_modules` y tu `package-lock.json` actual.
+## Suggested first test
+1. Connect system audio.
+2. Tree of Life · Living Tendrils:
+   - Memory: 0.25
+   - Memory Warp: 0.20
+   - Echo Zoom: 0.18
+   - Randomness: 0.55
+3. Move temporal speed from 0.04 to 0.88 in Matrix Rain.
+4. Try Aurora Veil / Feedback Cathedral / Mycelium Network / Luminous Vortex / Spectral Spirograph.
+5. Turn on Flower or Spiro waveform and raise its gain gradually.
+
+## Performance
+`Performance` quality disables the expensive memory-warp and afterimage passes. `HD / Adaptativa` is the recommended live-performance mode.

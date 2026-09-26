@@ -140,3 +140,10 @@ input[type="range"]::-webkit-slider-thumb{appearance:none;width:13px;height:13px
 .adaptive-quality{margin-top:10px;background:#090d13;border-color:#202a37}.preview-meta #fpsBadge{color:#7be8b0;min-width:62px;text-align:right}.preview-meta #fpsBadge.fps-warn{color:#ffbd72}.output-section .wide{margin-top:8px}
 
 .engine-activate{pointer-events:auto!important;margin-top:8px;min-height:34px;padding:0 14px;border-color:#3c3764;background:linear-gradient(180deg,#17152c,#0c0d15);color:#d8d1ff;font-size:9px;font-weight:850;letter-spacing:.10em}.engine-activate:hover{border-color:#7663c7;background:#1a1733}.engine-activate:disabled{opacity:.55;cursor:wait}
+
+.overlay-reset-btn{width:100%;margin-top:8px;min-height:34px;border:1px solid #253047;background:#0b1019;color:#aeb9cb;border-radius:9px;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;transition:border-color .15s ease,background .15s ease,color .15s ease}.overlay-reset-btn:hover{border-color:#6357d8;background:#11162a;color:#f3f5ff}.overlay-reset-btn:active{transform:translateY(1px)}
+
+/* v0.14 · living systems / memory / waveform layer */
+.memory-engine{margin:12px 0 3px;padding:10px 10px 5px;border:1px solid #1f2b34;border-radius:11px;background:radial-gradient(circle at 100% 0,rgba(0,217,255,.08),transparent 58%),#090d13}
+.memory-engine .engine-personality-head strong{color:#8fe7ff}.memory-engine .slider-control{margin:10px 0}.memory-engine select{margin-bottom:4px}
+.visual-waveform-layer{position:absolute!important;inset:0!important;z-index:2!important;width:100%!important;height:100%!important;pointer-events:none!important;mix-blend-mode:screen;opacity:.92}

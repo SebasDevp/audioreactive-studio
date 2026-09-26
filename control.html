@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AudioReactive Studio · Control v0.11.3</title>
+    <title>AudioReactive Studio · Control v0.14.1</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body class="control-body">
@@ -21,7 +21,7 @@
         <div class="brand-wrap">
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.11.3</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
+            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.14.1</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
             <h1>AudioReactive <strong>Studio</strong></h1>
           </div>
         </div>
@@ -117,20 +117,42 @@
               <option value="15">Merkaba Prism</option>
               <option value="16">Liquid Resonance</option>
               <option value="17">Galactic Bloom</option>
-              <option value="18">Frequency Tree</option>
+              <option value="18">Tree of Life · Living Tendrils</option>
+              <option value="19">Aurora Veil</option>
+              <option value="20">Feedback Cathedral</option>
+              <option value="21">Mycelium Network</option>
+              <option value="22">Luminous Vortex</option>
+              <option value="23">Spectral Spirograph</option>
             </select>
 
             <div class="slider-control"><label><span>Intensidad</span><b id="intensityValue">1.06</b></label><input id="intensity" type="range" min="0" max="2.5" value="1.06" step="0.01" /></div>
             <div class="slider-control"><label><span>Contraste</span><b id="contrastValue">1.08</b></label><input id="contrast" type="range" min="0.65" max="2" value="1.08" step="0.01" /></div>
-            <div class="slider-control"><label><span>Velocidad</span><b id="speedValue">0.88</b></label><input id="speed" type="range" min="0.08" max="3" value="0.88" step="0.01" /></div>
+            <div class="slider-control"><label><span>Velocidad temporal</span><b id="speedValue">0.88</b></label><input id="speed" type="range" min="0.02" max="3" value="0.88" step="0.01" /></div>
             <div class="slider-control"><label><span>Zoom</span><b id="zoomValue">1.00</b></label><input id="zoom" type="range" min="0.35" max="2.5" value="1" step="0.01" /></div>
             <div class="slider-control"><label><span>Partículas / densidad</span><b id="densityValue">1.28</b></label><input id="density" type="range" min="0.2" max="3" value="1.28" step="0.01" /></div>
             <div class="slider-control"><label><span>Bloom / glow</span><b id="bloomValue">0.82</b></label><input id="bloom" type="range" min="0" max="1.65" value="0.82" step="0.01" /></div>
             <div class="engine-personality">
-              <div class="engine-personality-head"><strong>PERSONALITY ENGINE</strong><small>Variación orgánica sin perder sincronía musical.</small></div>
-              <div class="slider-control"><label><span>Evolución / aleatoriedad</span><b id="randomnessValue">0.48</b></label><input id="randomness" type="range" min="0" max="1" value="0.48" step="0.01" /></div>
+              <div class="engine-personality-head"><strong>PERSONALITY ENGINE</strong><small>0 = estable · 1 = mutación generativa intensa, siempre interpolada y musical.</small></div>
+              <div class="slider-control"><label><span>Aleatoriedad / mutación</span><b id="randomnessValue">0.48</b></label><input id="randomness" type="range" min="0" max="1" value="0.48" step="0.01" /></div>
               <div class="slider-control"><label><span>Flujo / deformación</span><b id="flowValue">0.58</b></label><input id="flow" type="range" min="0" max="1.5" value="0.58" step="0.01" /></div>
               <div class="slider-control"><label><span>Zoom audio-reactivo</span><b id="audioZoomValue">0.62</b></label><input id="audioZoom" type="range" min="0" max="1.5" value="0.62" step="0.01" /></div>
+              <div class="memory-engine">
+                <div class="engine-personality-head"><strong>MEMORY / FEEDBACK</strong><small>Persistencia, deformación y eco espacial para que cada frame deje una huella viva.</small></div>
+                <div class="slider-control"><label><span>Memoria visual / trails</span><b id="feedbackValue">0.18</b></label><input id="feedback" type="range" min="0" max="1" value="0.18" step="0.01" /></div>
+                <div class="slider-control"><label><span>Warp de memoria</span><b id="memoryWarpValue">0.20</b></label><input id="memoryWarp" type="range" min="0" max="1.5" value="0.20" step="0.01" /></div>
+                <div class="slider-control"><label><span>Zoom de eco</span><b id="echoZoomValue">0.16</b></label><input id="echoZoom" type="range" min="0" max="1.5" value="0.16" step="0.01" /></div>
+                <label for="waveformMode">Waveform del audio</label>
+                <select id="waveformMode">
+                  <option value="off" selected>Off</option>
+                  <option value="line">Line · osciloscopio</option>
+                  <option value="double">Double Line</option>
+                  <option value="radial">Radial · círculo vivo</option>
+                  <option value="flower">Flower · pétalos reactivos</option>
+                  <option value="lasso">Lasso · órbita orgánica</option>
+                  <option value="spiro">Spiro · trazo armónico</option>
+                </select>
+                <div class="slider-control"><label><span>Intensidad waveform</span><b id="waveformGainValue">0.72</b></label><input id="waveformGain" type="range" min="0" max="1.5" value="0.72" step="0.01" /></div>
+              </div>
             </div>
 
             <div class="colors-row">
@@ -233,6 +255,7 @@
               <div class="slider-control"><label><span>Posición X</span><b id="logoPosXValue">0.00</b></label><input id="logoPosX" type="range" min="-1" max="1" value="0" step="0.01" /></div>
               <div class="slider-control"><label><span>Posición Y</span><b id="logoPosYValue">0.00</b></label><input id="logoPosY" type="range" min="-1" max="1" value="0" step="0.01" /></div>
               <div class="slider-control"><label><span>Rotación / drift</span><b id="logoRotationValue">0.35</b></label><input id="logoRotation" type="range" min="0" max="2" value="0.35" step="0.01" /></div>
+              <button id="logoResetRotation" class="secondary overlay-reset-btn" type="button">↺ Detener giro + volver a 0°</button>
               <p id="logoHint" class="micro-note">Cargá un PNG/SVG/WebP/JPG y lo integraremos como overlay vivo sobre todas las visuales.</p>
             </div>
           </section>
@@ -279,14 +302,14 @@
             </div>
             <div class="deck-card grow">
               <span class="deck-label">QUICK PRESETS</span>
-              <div class="preset-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd><kbd>0</kbd><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd><kbd>I</kbd><kbd>O</kbd></div>
+              <div class="preset-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd><kbd>0</kbd><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd><kbd>I</kbd><kbd>O</kbd><kbd>P</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd></div>
             </div>
             <div class="deck-card right">
               <span class="deck-label">WORLD STATES</span>
               <strong>SEBASDEVP · GENERATIVE ECOSYSTEM</strong>
             </div>
           </div>
-          <div class="hint">v0.11.3 · MODULAR GPU ENGINE: un shader compacto por mundo, transiciones por render targets y fallback seguro por preset.</div>
+          <div class="hint">v0.14.1 · STABLE LIVING ENGINE: 24 mundos, árbol vivo y compatibilidad GPU automática.</div>
         </section>
       </section>
     </main>

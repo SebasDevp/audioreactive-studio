@@ -1,9 +1,10 @@
-const CHANNEL_NAME = 'audioreactive-studio-v011';
-const STATE_KEY = 'ars_web_visual_state_v011';
+const CHANNEL_NAME = 'audioreactive-studio-v014';
+const STATE_KEY = 'ars_web_visual_state_v014';
 const isElectron = Boolean(window.studioAPI);
 
 let webOutputWindow = null;
 let channel = null;
+let lastPersistedState = '';
 
 if (!isElectron && 'BroadcastChannel' in window) {
   channel = new BroadcastChannel(CHANNEL_NAME);
@@ -39,9 +40,19 @@ function webCaptureDescriptor() {
 function rememberState(state) {
   try {
     const compact = { ...state };
-    // El logo ya se persiste en ars_logo_data. Evitamos duplicar blobs grandes.
-    delete compact.logoDataUrl;
-    localStorage.setItem(STATE_KEY, JSON.stringify(compact));
+    // Persist only controls. Audio analysis is high-frequency and belongs on
+    // BroadcastChannel/IPC, not localStorage; avoiding those writes materially
+    // reduces main-thread work in the web build.
+    [
+      'logoDataUrl','waveform',
+      'sub','bass','mid','treble','level','beat','flux','centroid',
+      'subPulse','bassPulse','midPulse','treblePulse','levelPulse',
+      'subAtt','bassAtt','midAtt','trebleAtt','levelAtt'
+    ].forEach((key) => delete compact[key]);
+    const serialized = JSON.stringify(compact);
+    if (serialized === lastPersistedState) return;
+    lastPersistedState = serialized;
+    localStorage.setItem(STATE_KEY, serialized);
   } catch (_) {}
 }
 
