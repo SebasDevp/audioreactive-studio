@@ -33,13 +33,17 @@ export class AudioEngine {
     if (this.inputGainNode) this.inputGainNode.gain.setTargetAtTime(this.inputGain, this.context.currentTime, 0.02);
   }
 
-  async listInputs() {
-    try {
-      const temp = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-      });
-      temp.getTracks().forEach((track) => track.stop());
-    } catch (_) {}
+  async listInputs(requestPermission = false) {
+    // Fast path for startup: enumerate first without opening the microphone.
+    // Labels may be generic until the user explicitly grants permission.
+    if (requestPermission) {
+      try {
+        const temp = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+        temp.getTracks().forEach((track) => track.stop());
+      } catch (_) {}
+    }
 
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices.filter((device) => device.kind === 'audioinput');
@@ -112,7 +116,7 @@ export class AudioEngine {
     this.inputGainNode.gain.value = this.inputGain;
 
     this.analyser = this.context.createAnalyser();
-    this.analyser.fftSize = 4096;
+    this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.58;
     this.analyser.minDecibels = -98;
     this.analyser.maxDecibels = -10;

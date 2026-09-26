@@ -1,59 +1,20 @@
-# Publicar AudioReactive Studio en la Web
+# Deploy Web · AudioReactive Studio v0.11.1
 
-## 1. Probar primero en tu PC
+La versión web está optimizada para carga progresiva: la interfaz entra primero y el motor Three.js/shader se solicita después. Los assets con hash generados por Vite pueden ser cacheados por Cloudflare.
 
-Desde la carpeta del proyecto:
+## Cloudflare Pages
 
-```powershell
-npm run dev:web
-```
+- Production branch: `main`
+- Build command: `npm run build:web`
+- Build output directory: `dist`
+- Root directory: vacío
 
-Abrí `http://localhost:5173`.
+## Publicar
 
-Probá:
-- preview
-- micrófono
-- captura de pestaña de YouTube con audio
-- presets
-- logo
-- OPEN OUTPUT
-- comunicación entre CONTROL y OUTPUT
-
-## 2. Verificar el build
-
-```powershell
-npm run build:web
-```
-
-Debe aparecer la carpeta `dist`.
-
-Opcionalmente podés probar exactamente ese build con:
-
-```powershell
-npm run preview:web
-```
-
-## 3. Subir v0.8 a GitHub
-
-```powershell
+```bash
 git add .
-git commit -m "AudioReactive Studio v0.8 web mode"
+git commit -m "AudioReactive Studio v0.11.1 fast boot"
 git push
 ```
 
-## 4. Conectar GitHub a Cloudflare Pages
-
-Usar:
-
-```text
-Repository: SebasDevp/audioreactive-studio
-Production branch: main
-Build command: npm run build:web
-Build output: dist
-```
-
-Cloudflare dará una URL temporal `*.pages.dev`. Después se puede conectar un subdominio propio como `visuals.soyfranconi.com`.
-
-## Importante
-
-La versión web funciona mejor en Chrome o Edge. La posibilidad exacta de compartir audio de una ventana/pantalla depende del navegador y del sistema operativo. Para YouTube, la opción más fiable es compartir directamente la pestaña con **Compartir audio** activado.
+Cloudflare Pages reconstruirá el proyecto automáticamente.

@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('studioAPI', {
   getDisplays: () => ipcRenderer.invoke('display:list'),
   showOutput: (displayId) => ipcRenderer.invoke('display:show-output', displayId),
+  detachOutput: () => ipcRenderer.invoke('display:detach-output'),
+  toggleOutputFullscreen: () => ipcRenderer.invoke('display:toggle-output-fullscreen'),
   closeOutput: () => ipcRenderer.invoke('display:close-output'),
 
   getCaptureSources: () => ipcRenderer.invoke('capture:list-sources'),

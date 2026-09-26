@@ -1,126 +1,59 @@
-# AudioReactive Studio v0.9 · Desktop + Web
+# AudioReactive Studio v0.11.3 · SebasDevp
 
-AudioReactive Studio v0.9 puede ejecutarse de dos maneras desde el mismo proyecto:
+Versión de estabilidad del motor visual. Mantiene los 19 mundos, Personality Engine, transiciones generativas, overlays, Vegvísir, OUTPUT y Auto FPS, pero cambia la arquitectura GPU para evitar previews negros y compilaciones monolíticas.
 
-- **Desktop / Electron**: mantiene la experiencia actual, selección de pantallas y workflow de escritorio.
-- **Web / Browser**: abre el estudio directamente desde Chrome/Edge, captura una pestaña/ventana/pantalla mediante el selector seguro del navegador y permite abrir una ventana OUTPUT independiente.
+## Cambio principal: Modular GPU Engine
 
-## Ejecutar Desktop
+Antes todos los presets vivían dentro de un único fragment shader enorme. En algunas GPUs/Chromium eso podía compilar lentamente o directamente dejar el preview negro.
+
+Ahora:
+
+- cada preset tiene su propio shader compacto;
+- en estado normal se renderiza **un solo preset + bloom**;
+- durante una transición se renderizan sólo **dos presets** y un shader de mezcla;
+- si un preset particular falla al compilar, activa un fallback audio-reactivo sin tumbar el resto del motor;
+- no se espera una compilación gigante durante el arranque.
+
+## Presets
+
+1. Cosmic Particles
+2. Neon Flow
+3. Sacred Dust
+4. Angelic Particles
+5. Techno Tunnel
+6. Quantum Dust
+7. Fibonacci Bloom
+8. Rune Pulse · Vegvísir
+9. Symbol Forge
+10. Seed World
+11. Flower of Life Nexus
+12. Artifact Shrine
+13. Entity Gate
+14. Dynamic Panels
+15. Matrix Rain
+16. Merkaba Prism
+17. Liquid Resonance
+18. Galactic Bloom
+19. Frequency Tree
+
+## Arranque
 
 ```bash
 npm run dev
 ```
 
-## Ejecutar Web en desarrollo
+Web:
 
 ```bash
 npm run dev:web
 ```
 
-Después abrir:
-
-```text
-http://localhost:5173
-```
-
-`index.html` redirige automáticamente a `control.html`.
-
-## Capturar YouTube en Web
-
-1. Tocá **Elegir fuente + audio**.
-2. En Chrome/Edge elegí **Pestaña**.
-3. Seleccioná la pestaña donde está YouTube.
-4. Activá **Compartir audio**.
-5. Reproducí música.
-
-Los medidores LEVEL / BASS / MID / TREBLE deberían comenzar a reaccionar y alimentar el motor visual.
-
-Para intentar capturar audio general del equipo, usá **Elegir pantalla / audio del sistema** y seleccioná la opción de audio que ofrezca el navegador/SO.
-
-## OUTPUT en Web
-
-El botón de OUTPUT abre `output.html` en una segunda ventana. CONTROL y OUTPUT se sincronizan mediante `BroadcastChannel`.
-
-En la ventana OUTPUT aparece el botón **Entrar en fullscreen**. Llevá esa ventana al proyector/TV y activá fullscreen allí.
-
-## Build Web
+Build Cloudflare:
 
 ```bash
 npm run build:web
 ```
 
-Vite genera:
+## Actualización
 
-```text
-dist/
-```
-
-Esa carpeta es la versión estática que puede publicar Cloudflare Pages.
-
-## Cloudflare Pages
-
-Configuración de build:
-
-```text
-Framework preset: Vite
-Build command: npm run build:web
-Build output directory: dist
-```
-
-Node recomendado: 22.
-
-## GitHub workflow
-
-Cuando reemplaces la versión anterior por esta:
-
-```bash
-git add .
-git commit -m "AudioReactive Studio v0.8 web mode"
-git push
-```
-
-Después Cloudflare Pages puede conectarse al repositorio y desplegar automáticamente cada nuevo push.
-
-## Diferencias Web vs Desktop
-
-### Desktop
-- Electron controla la ventana OUTPUT.
-- Puede enumerar pantallas/ventanas mediante APIs de Electron.
-- Es la base ideal para futuras integraciones nativas (por ejemplo WASAPI por proceso).
-
-### Web
-- Por privacidad del navegador no puede enumerar silenciosamente Chrome/Rekordbox/otras apps.
-- Al capturar, Chrome/Edge muestra su selector oficial y el usuario elige la pestaña, ventana o pantalla.
-- Micrófono y captura requieren contexto seguro: `https://` en producción o `localhost` durante desarrollo.
-
-## Arquitectura v0.8
-
-```text
-src/
-├── audio-engine.js
-├── visual-engine.js
-├── platform-bridge.js   ← detecta Desktop vs Web
-├── control.js
-├── output.js
-└── assets/
-
-Electron ─┐
-          ├── mismo motor visual/audio
-Browser ──┘
-```
-
-El objetivo es que los próximos presets y mejoras se programen una sola vez y funcionen tanto en Desktop como en Web.
-
-
-## Overlay multimedia v0.9
-
-La capa antes llamada “Logo vivo” ahora funciona también correctamente con imágenes y fotografías:
-
-- **Original**: conserva los colores y transparencia del archivo. Es el modo recomendado para imágenes PNG/JPG/WebP.
-- **Monocromo blanco**: convierte el archivo en una silueta clara, útil para logos.
-- **Tinte reactivo**: estiliza logos/símbolos y permite animar el color con la música.
-- **Composición**: Normal, Screen, Add/Plus, Multiply y Overlay.
-- **Glow** independiente.
-- La opacidad ahora representa de forma directa el valor elegido; sólo se modula cuando se activa Titilar.
-- El tamaño preserva la relación de aspecto real de la imagen.
-- Las copias mantienen su proporción y se distribuyen sin deformar el contenido.
+Copiá el contenido de esta carpeta sobre el proyecto actual. Conservá `.git`, `node_modules` y tu `package-lock.json` actual.

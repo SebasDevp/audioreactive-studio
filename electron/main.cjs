@@ -84,23 +84,15 @@ async function resolveSelectedCaptureSource() {
   return sources.find((source) => source.id.startsWith('screen:')) || sources[0] || null;
 }
 
-async function showOutputOnDisplay(displayId) {
-  const display = screen.getAllDisplays().find((item) => String(item.id) === String(displayId)) || screen.getPrimaryDisplay();
-
-  if (outputWindow && !outputWindow.isDestroyed()) {
-    outputWindow.setFullScreen(false);
-    outputWindow.setBounds(display.bounds);
-    outputWindow.setFullScreen(true);
-    outputWindow.showInactive();
-    return true;
-  }
+async function ensureOutputWindow() {
+  if (outputWindow && !outputWindow.isDestroyed()) return outputWindow;
 
   outputWindow = new BrowserWindow({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-    frame: false,
+    width: 1280,
+    height: 720,
+    minWidth: 640,
+    minHeight: 360,
+    frame: true,
     backgroundColor: '#000000',
     show: false,
     autoHideMenuBar: true,
@@ -108,20 +100,56 @@ async function showOutputOnDisplay(displayId) {
   });
 
   outputWindow.setMenuBarVisibility(false);
-  outputWindow.loadURL(pageUrl('output.html'));
   outputWindow.webContents.on('did-finish-load', () => {
     if (lastVisualState && outputWindow && !outputWindow.isDestroyed()) {
       outputWindow.webContents.send('visual:state', lastVisualState);
     }
   });
-  outputWindow.once('ready-to-show', () => {
-    outputWindow.setFullScreen(true);
-    outputWindow.showInactive();
-  });
+  await outputWindow.loadURL(pageUrl('output.html'));
   outputWindow.on('closed', () => {
     outputWindow = null;
   });
+  return outputWindow;
+}
+
+async function showDetachedOutput() {
+  const win = await ensureOutputWindow();
+  if (win.isFullScreen()) win.setFullScreen(false);
+
+  const anchorBounds = controlWindow && !controlWindow.isDestroyed()
+    ? controlWindow.getBounds()
+    : screen.getPrimaryDisplay().bounds;
+  const display = screen.getDisplayNearestPoint({
+    x: anchorBounds.x + Math.round(anchorBounds.width / 2),
+    y: anchorBounds.y + Math.round(anchorBounds.height / 2)
+  });
+  const work = display.workArea;
+  const width = Math.min(1280, Math.max(720, Math.round(work.width * 0.78)));
+  const height = Math.min(720, Math.max(405, Math.round(width * 9 / 16)));
+  const x = work.x + Math.round((work.width - width) / 2);
+  const y = work.y + Math.round((work.height - height) / 2);
+  win.setBounds({ x, y, width, height });
+  win.show();
+  win.focus();
   return true;
+}
+
+async function showOutputOnDisplay(displayId) {
+  const display = screen.getAllDisplays().find((item) => String(item.id) === String(displayId)) || screen.getPrimaryDisplay();
+  const win = await ensureOutputWindow();
+  if (win.isFullScreen()) win.setFullScreen(false);
+  win.setBounds(display.bounds);
+  win.setFullScreen(true);
+  win.show();
+  return true;
+}
+
+async function toggleOutputFullscreen() {
+  const win = await ensureOutputWindow();
+  win.setFullScreen(!win.isFullScreen());
+  win.show();
+  win.focus();
+  return win.isFullScreen();
 }
 
 function configureMediaPermissions() {
@@ -170,6 +198,8 @@ app.whenReady().then(() => {
 
   ipcMain.handle('display:list', () => getDisplays());
   ipcMain.handle('display:show-output', (_event, displayId) => showOutputOnDisplay(displayId));
+  ipcMain.handle('display:detach-output', () => showDetachedOutput());
+  ipcMain.handle('display:toggle-output-fullscreen', () => toggleOutputFullscreen());
   ipcMain.handle('display:close-output', () => {
     if (outputWindow && !outputWindow.isDestroyed()) outputWindow.close();
     return true;

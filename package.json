@@ -1,11 +1,11 @@
 {
   "name": "audioreactive-studio",
-  "version": "0.9.0",
+  "version": "0.11.3",
   "private": true,
-  "description": "Hybrid desktop and web audio-reactive visual performance app",
+  "description": "SebasDevp modular GPU audio-reactive visual performance instrument",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173/control.html && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "dev": "concurrently -k \"vite --host 127.0.0.1 --strictPort\" \"wait-on tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
     "dev:web": "vite --host 0.0.0.0",
     "build": "vite build",
     "build:web": "vite build",

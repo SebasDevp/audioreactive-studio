@@ -3,16 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AudioReactive Studio · Control v0.9</title>
+    <title>AudioReactive Studio · Control v0.11.3</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body class="control-body">
+    <div id="bootSplash" class="boot-splash" aria-hidden="true">
+      <div class="boot-core">
+        <div class="boot-mark"><span></span><span></span><span></span></div>
+        <div class="boot-kicker">SEBASDEVP</div>
+        <div class="boot-title">AudioReactive Studio</div>
+        <div class="boot-sub">GENERATIVE AUDIO VISUAL SYSTEM</div>
+        <div class="boot-line"><i></i></div>
+      </div>
+    </div>
     <main class="app-shell">
       <header class="topbar">
         <div class="brand-wrap">
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.9</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
+            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.11.3</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
             <h1>AudioReactive <strong>Studio</strong></h1>
           </div>
         </div>
@@ -31,7 +40,7 @@
 
       <section class="workspace">
         <aside class="panel controls-panel">
-          <section class="control-section first">
+          <section class="control-section first" data-module="audio">
             <div class="section-heading">
               <div><span class="section-index">01</span><span class="section-title">AUDIO SOURCE</span></div>
               <button id="stopAudio" class="tiny-btn">STOP</button>
@@ -86,7 +95,7 @@
             </div>
           </section>
 
-          <section class="control-section">
+          <section class="control-section" data-module="visual">
             <div class="section-heading"><div><span class="section-index">02</span><span class="section-title">VISUAL ENGINE</span></div></div>
             <label>Plantilla</label>
             <select id="preset" class="visual-select">
@@ -104,8 +113,11 @@
               <option value="11">Artifact Shrine</option>
               <option value="12">Entity Gate</option>
               <option value="13">Dynamic Panels</option>
-              <option value="14">Matrix Lattice</option>
+              <option value="14">Matrix Rain</option>
               <option value="15">Merkaba Prism</option>
+              <option value="16">Liquid Resonance</option>
+              <option value="17">Galactic Bloom</option>
+              <option value="18">Frequency Tree</option>
             </select>
 
             <div class="slider-control"><label><span>Intensidad</span><b id="intensityValue">1.06</b></label><input id="intensity" type="range" min="0" max="2.5" value="1.06" step="0.01" /></div>
@@ -113,7 +125,13 @@
             <div class="slider-control"><label><span>Velocidad</span><b id="speedValue">0.88</b></label><input id="speed" type="range" min="0.08" max="3" value="0.88" step="0.01" /></div>
             <div class="slider-control"><label><span>Zoom</span><b id="zoomValue">1.00</b></label><input id="zoom" type="range" min="0.35" max="2.5" value="1" step="0.01" /></div>
             <div class="slider-control"><label><span>Partículas / densidad</span><b id="densityValue">1.28</b></label><input id="density" type="range" min="0.2" max="3" value="1.28" step="0.01" /></div>
-            <div class="slider-control"><label><span>Bloom / glow</span><b id="bloomValue">0.88</b></label><input id="bloom" type="range" min="0" max="2.2" value="0.88" step="0.01" /></div>
+            <div class="slider-control"><label><span>Bloom / glow</span><b id="bloomValue">0.82</b></label><input id="bloom" type="range" min="0" max="1.65" value="0.82" step="0.01" /></div>
+            <div class="engine-personality">
+              <div class="engine-personality-head"><strong>PERSONALITY ENGINE</strong><small>Variación orgánica sin perder sincronía musical.</small></div>
+              <div class="slider-control"><label><span>Evolución / aleatoriedad</span><b id="randomnessValue">0.48</b></label><input id="randomness" type="range" min="0" max="1" value="0.48" step="0.01" /></div>
+              <div class="slider-control"><label><span>Flujo / deformación</span><b id="flowValue">0.58</b></label><input id="flow" type="range" min="0" max="1.5" value="0.58" step="0.01" /></div>
+              <div class="slider-control"><label><span>Zoom audio-reactivo</span><b id="audioZoomValue">0.62</b></label><input id="audioZoom" type="range" min="0" max="1.5" value="0.62" step="0.01" /></div>
+            </div>
 
             <div class="colors-row">
               <div><label>Color A</label><input id="colorA" type="color" value="#6c4cff" /></div>
@@ -124,13 +142,38 @@
             <label class="quality-label">Calidad de render</label>
             <select id="quality">
               <option value="performance">Performance</option>
-              <option value="high" selected>HD / Nativa</option>
+              <option value="high" selected>HD / Adaptativa</option>
               <option value="ultra">Ultra / Supersampling</option>
             </select>
+            <label class="check-pill adaptive-quality"><input id="adaptiveQuality" type="checkbox" checked /> <span>Auto FPS · ajustar resolución para mantener fluidez</span></label>
           </section>
 
-          <section class="control-section">
-            <div class="section-heading"><div><span class="section-index">03</span><span class="section-title">LOGO / ARTEFACTOS</span></div></div>
+          <section class="control-section" data-module="transitions">
+            <div class="section-heading"><div><span class="section-index">03</span><span class="section-title">TRANSITIONS</span></div></div>
+            <div class="transition-intro">
+              <strong>Generative Scene Fusion</strong>
+              <small>Las transiciones forman parte del motor y reaccionan al beat, bajos, medios y agudos.</small>
+            </div>
+            <label for="transitionMode">Estilo de transición</label>
+            <select id="transitionMode">
+              <option value="morph">Morph · mezcla continua</option>
+              <option value="dissolve">Dissolve · partículas</option>
+              <option value="radial">Radial · expansión</option>
+              <option value="prism">Prism · geometría</option>
+              <option value="ecosystem" selected>Ecosystem · generativa</option>
+            </select>
+            <div class="slider-control bipolar-control">
+              <label><span>Velocidad de transición</span><b id="transitionSpeedValue">0</b></label>
+              <input id="transitionSpeed" type="range" min="-10" max="10" value="0" step="1" />
+              <div class="bipolar-scale"><span>-10 LENTO</span><span>0 NEUTRAL</span><span>+10 RÁPIDO</span></div>
+            </div>
+            <div class="slider-control"><label><span>Zoom de transición</span><b id="transitionZoomValue">0.55</b></label><input id="transitionZoom" type="range" min="0" max="1.5" value="0.55" step="0.01" /></div>
+            <label class="check-pill transition-sync"><input id="transitionSync" type="checkbox" checked /> <span>Sincronizar inicio al beat cuando hay señal</span></label>
+            <div class="transition-status"><i></i><span id="transitionStatusText">READY · ECOSYSTEM</span></div>
+          </section>
+
+          <section class="control-section" data-module="overlay">
+            <div class="section-heading"><div><span class="section-index">04</span><span class="section-title">LOGO / ARTEFACTOS</span></div></div>
             <div class="source-card accent-card">
               <div class="source-title-row">
                 <div class="source-icon neon">LOGO</div>
@@ -194,14 +237,16 @@
             </div>
           </section>
 
-          <section class="control-section output-section">
-            <div class="section-heading"><div><span class="section-index">04</span><span class="section-title">OUTPUT</span></div></div>
+          <section class="control-section output-section" data-module="output">
+            <div class="section-heading"><div><span class="section-index">05</span><span class="section-title">OUTPUT</span></div></div>
             <label>Pantalla / proyector / TV</label>
             <select id="displaySelect"></select>
             <div class="button-grid">
-              <button id="openOutput" class="primary">GO FULLSCREEN</button>
-              <button id="closeOutput">Cerrar salida</button>
+              <button id="openOutput" class="primary">FULLSCREEN DISPLAY</button>
+              <button id="detachOutputPanel">VENTANA OUTPUT</button>
             </div>
+            <button id="closeOutput" class="wide">Cerrar salida</button>
+            <p class="micro-note"><b>Ventana Output</b> abre una salida movible para arrastrarla al segundo monitor. <b>Fullscreen Display</b> la lleva directamente a la pantalla elegida.</p>
           </section>
         </aside>
 
@@ -210,12 +255,20 @@
             <div class="preview-title">
               <span class="live-chip"><i></i> LIVE PREVIEW</span>
               <span id="beatBadge" class="beat-badge">BEAT</span>
+              <button id="detachOutput" class="detach-btn" title="Abrir una ventana OUTPUT movible">↗ OUTPUT WINDOW</button>
             </div>
-            <div class="preview-meta"><span>WEBGL 2 + BLOOM</span><span>GENERATIVE ENGINE</span><span id="qualityBadge">HD</span></div>
+            <div class="preview-meta"><span>WEBGL 2 + BLOOM</span><span>GENERATIVE ENGINE</span><span id="fpsBadge">-- FPS</span><span id="qualityBadge">HD</span></div>
           </div>
 
           <div class="stage-wrap">
-            <div id="preview" class="preview"></div>
+            <div id="preview" class="preview">
+              <div id="previewIdle" class="preview-idle">
+                <span class="preview-idle-mark"><i></i><i></i><i></i></span>
+                <strong>INITIALIZING VISUAL ENGINE…</strong>
+                <small>SEBASDEVP · AUDIOREACTIVE STUDIO</small>
+                <button id="activateVisualEngine" class="engine-activate" hidden>ACTIVATE VISUAL ENGINE</button>
+              </div>
+            </div>
             <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
           </div>
 
@@ -226,17 +279,30 @@
             </div>
             <div class="deck-card grow">
               <span class="deck-label">QUICK PRESETS</span>
-              <div class="preset-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd><kbd>0</kbd><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd></div>
+              <div class="preset-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd><kbd>7</kbd><kbd>8</kbd><kbd>9</kbd><kbd>0</kbd><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd><kbd>I</kbd><kbd>O</kbd></div>
             </div>
             <div class="deck-card right">
               <span class="deck-label">WORLD STATES</span>
-              <strong>GEOMETRY · ARTIFACTS · PANELS</strong>
+              <strong>SEBASDEVP · GENERATIVE ECOSYSTEM</strong>
             </div>
           </div>
-          <div class="hint">Ahora la estética suma una lectura más musical y orgánica: Vegvísir interactivo, Matrix Lattice, Merkaba Prism y transiciones de color más finas. Con zoom in / zoom out vas a ir descubriendo mundos, microdetalles y artefactos dentro de cada preset.</div>
+          <div class="hint">v0.11.3 · MODULAR GPU ENGINE: un shader compacto por mundo, transiciones por render targets y fallback seguro por preset.</div>
         </section>
       </section>
     </main>
+    <script>
+      // Independent boot failsafe: even if the module crashes before initialization,
+      // the splash cannot remain on screen forever.
+      (() => {
+        // Independent last-resort release. control.js owns the normal boot timing.
+        window.setTimeout(() => {
+          const splash = document.getElementById('bootSplash');
+          if (!splash) return;
+          splash.classList.add('is-ready');
+          window.setTimeout(() => splash.remove(), 260);
+        }, 1500);
+      })();
+    </script>
     <script type="module" src="./src/control.js"></script>
   </body>
 </html>

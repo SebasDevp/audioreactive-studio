@@ -3,22 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AudioReactive Studio · Output</title>
+    <title>AudioReactive Studio · Output v0.11.3</title>
     <link rel="stylesheet" href="./src/styles.css" />
     <style>
       html,body,#output{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
       body:before{display:none}
       #output{position:relative}
       canvas{display:block;width:100%;height:100%}
-      #webFullscreen{position:fixed;z-index:9999;right:18px;top:18px;min-height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(8,10,15,.72);color:#fff;font:600 12px/1 system-ui;backdrop-filter:blur(12px);cursor:pointer;opacity:.72;transition:.18s}
-      #webFullscreen:hover{opacity:1}
-      .is-fullscreen #webFullscreen{opacity:.16}
-      .is-fullscreen #webFullscreen:hover{opacity:.9}
+      #outputFullscreen{position:fixed;z-index:9999;right:18px;top:18px;min-height:38px;padding:0 14px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(8,10,15,.72);color:#fff;font:600 12px/1 system-ui;backdrop-filter:blur(12px);cursor:pointer;opacity:.72;transition:.18s}
+      #outputFullscreen:hover{opacity:1}
+      .is-fullscreen #outputFullscreen{opacity:.16}
+      .is-fullscreen #outputFullscreen:hover{opacity:.9}
+      .output-signature{position:fixed;z-index:9998;left:18px;bottom:16px;font:800 8px/1 system-ui;letter-spacing:.18em;color:rgba(255,255,255,.18);pointer-events:none;transition:opacity .6s ease}.is-fullscreen .output-signature{opacity:.18}
+    .output-loading{position:fixed;inset:0;z-index:9997;display:grid;place-items:center;color:rgba(255,255,255,.34);font:800 9px/1 system-ui;letter-spacing:.16em;pointer-events:none;transition:opacity .3s ease}.output-loading.is-ready{opacity:0}
     </style>
   </head>
   <body>
     <div id="output"></div>
-    <button id="webFullscreen" hidden>Entrar en fullscreen</button>
+    <div id="outputLoading" class="output-loading">PREPARING VISUAL ENGINE…</div>
+    <div class="output-signature">SEBASDEVP · AUDIOREACTIVE</div>
+    <button id="outputFullscreen">Entrar en fullscreen</button>
     <script type="module" src="./src/output.js"></script>
   </body>
 </html>

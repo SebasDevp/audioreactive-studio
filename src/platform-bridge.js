@@ -1,5 +1,5 @@
-const CHANNEL_NAME = 'audioreactive-studio-v08';
-const STATE_KEY = 'ars_web_visual_state';
+const CHANNEL_NAME = 'audioreactive-studio-v011';
+const STATE_KEY = 'ars_web_visual_state_v011';
 const isElectron = Boolean(window.studioAPI);
 
 let webOutputWindow = null;
@@ -45,6 +45,23 @@ function rememberState(state) {
   } catch (_) {}
 }
 
+function openWebOutputWindow() {
+  const outputUrl = new URL('./output.html?mode=web', window.location.href).href;
+  if (webOutputWindow && !webOutputWindow.closed) {
+    webOutputWindow.focus();
+    return true;
+  }
+  webOutputWindow = window.open(
+    outputUrl,
+    'AudioReactiveStudioOutput',
+    'popup=yes,width=1280,height=720,resizable=yes,scrollbars=no'
+  );
+  if (!webOutputWindow) {
+    throw new Error('El navegador bloqueó la ventana OUTPUT. Permití ventanas emergentes para este sitio y volvé a intentar.');
+  }
+  return true;
+}
+
 export const platform = {
   isElectron,
   isWeb: !isElectron,
@@ -57,24 +74,17 @@ export const platform = {
 
   async showOutput(displayId) {
     if (isElectron) return window.studioAPI.showOutput(displayId);
+    return openWebOutputWindow();
+  },
 
-    const outputUrl = new URL('./output.html?mode=web', window.location.href).href;
-    if (webOutputWindow && !webOutputWindow.closed) {
-      webOutputWindow.focus();
-      return true;
-    }
+  async detachOutput() {
+    if (isElectron) return window.studioAPI.detachOutput();
+    return openWebOutputWindow();
+  },
 
-    webOutputWindow = window.open(
-      outputUrl,
-      'AudioReactiveStudioOutput',
-      'popup=yes,width=1280,height=720,resizable=yes,scrollbars=no'
-    );
-
-    if (!webOutputWindow) {
-      throw new Error('El navegador bloqueó la ventana OUTPUT. Permití ventanas emergentes para este sitio y volvé a intentar.');
-    }
-
-    return true;
+  async toggleOutputFullscreen() {
+    if (isElectron) return window.studioAPI.toggleOutputFullscreen();
+    return false;
   },
 
   async closeOutput() {
