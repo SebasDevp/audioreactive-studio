@@ -207,7 +207,7 @@ export class AudioEngine {
   }
 
   updateBandPulse(name, value, options = {}) {
-    const decay = options.decay ?? 0.86;
+    const decay = Math.pow(options.decay ?? 0.86, (options.dt ?? 1 / 60) * 60);
     const riseWeight = options.riseWeight ?? 4.6;
     const sustainWeight = options.sustainWeight ?? 0.32;
     const threshold = options.threshold ?? 0.035;
@@ -299,11 +299,11 @@ export class AudioEngine {
     this.lastAnalysisTime = now;
     const beat = this.detectBeat(Math.max(sub, bass), lowMid, level, now);
 
-    const subPulse = this.updateBandPulse('sub', sub, { riseWeight: 4.8, sustainWeight: 0.26, threshold: 0.025, decay: 0.87 });
-    const bassPulse = this.updateBandPulse('bass', bass, { riseWeight: 4.4, sustainWeight: 0.31, threshold: 0.03, decay: 0.88 });
-    const midPulse = this.updateBandPulse('mid', mid, { riseWeight: 5.2, sustainWeight: 0.25, threshold: 0.04, decay: 0.84 });
-    const treblePulse = this.updateBandPulse('treble', treble, { riseWeight: 5.8, sustainWeight: 0.23, threshold: 0.045, decay: 0.80 });
-    const levelPulse = this.updateBandPulse('level', level, { riseWeight: 5.0, sustainWeight: 0.22, threshold: 0.03, decay: 0.86 });
+    const subPulse = this.updateBandPulse('sub', sub, { dt, riseWeight: 4.8, sustainWeight: 0.26, threshold: 0.025, decay: 0.87 });
+    const bassPulse = this.updateBandPulse('bass', bass, { dt, riseWeight: 4.4, sustainWeight: 0.31, threshold: 0.03, decay: 0.88 });
+    const midPulse = this.updateBandPulse('mid', mid, { dt, riseWeight: 5.2, sustainWeight: 0.25, threshold: 0.04, decay: 0.84 });
+    const treblePulse = this.updateBandPulse('treble', treble, { dt, riseWeight: 5.8, sustainWeight: 0.23, threshold: 0.045, decay: 0.80 });
+    const levelPulse = this.updateBandPulse('level', level, { dt, riseWeight: 5.0, sustainWeight: 0.22, threshold: 0.03, decay: 0.86 });
 
     const subAtt = this.updateAttenuated('sub', sub, dt);
     const bassAtt = this.updateAttenuated('bass', bass, dt);

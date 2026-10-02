@@ -5,6 +5,7 @@ const isElectron = Boolean(window.studioAPI);
 let webOutputWindow = null;
 let channel = null;
 let lastPersistedState = '';
+let lastPersistedAt = -Infinity;
 
 if (!isElectron && 'BroadcastChannel' in window) {
   channel = new BroadcastChannel(CHANNEL_NAME);
@@ -39,6 +40,10 @@ function webCaptureDescriptor() {
 
 function rememberState(state) {
   try {
+    const now=performance.now();
+    // Automation streams on the channel; its drifting values need only a light
+    // checkpoint for newly opened OUTPUT windows, not a storage write per frame.
+    if((state.autoVisual||state.autoLogo)&&now-lastPersistedAt<1000)return;
     const compact = { ...state };
     // Persist only controls. Audio analysis is high-frequency and belongs on
     // BroadcastChannel/IPC, not localStorage; avoiding those writes materially
@@ -52,6 +57,7 @@ function rememberState(state) {
     const serialized = JSON.stringify(compact);
     if (serialized === lastPersistedState) return;
     lastPersistedState = serialized;
+    lastPersistedAt = now;
     localStorage.setItem(STATE_KEY, serialized);
   } catch (_) {}
 }

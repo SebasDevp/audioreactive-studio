@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { ArcaneLivingTree } from './arcane-living-tree.js';
+import { approach, finite, spinRadiansPerSecond } from './motion.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -21,6 +23,7 @@ const GLSL_COMMON = String.raw`
 
   uniform vec2 uResolution;
   uniform float uTime;
+  uniform float uMatrixTime, uEvolution, uSpin, uViewAngle, uViewTilt, uPerspective, uAutoVisual;
   uniform float uSub;
   uniform float uBass;
   uniform float uMid;
@@ -61,6 +64,8 @@ const GLSL_COMMON = String.raw`
   uniform float uSceneSeed;
   uniform float uFrameRandom;
   uniform float uTreeGrowth;
+  uniform sampler2D uTreeTexture;
+  uniform float uTreePresence;
   uniform vec3 uColorA;
   uniform vec3 uColorB;
 
@@ -111,7 +116,7 @@ const GLSL_COMMON = String.raw`
 
   vec3 palette(float t){
     // Smooth continuous A/B fusion. uColorMix biases the palette without creating hard bands.
-    float phase = t*2.35 + uTime*0.035 + uPatternShift*0.14 + uMidPulse*0.16 + uMidAtt*0.20 + uSceneSeed*0.11;
+    float phase = t*2.35 + uTime*0.035 + uPatternShift*0.14 + uMidPulse*0.16 + uMidAtt*0.20 + uSceneSeed*0.11 + uEvolution*0.07;
     float wave = 0.5 + 0.5*sin(phase + 0.18*sin(phase*0.47));
     float bias = (uColorMix - 0.5) * 0.92;
     float blend = smoothstep(0.02, 0.98, clamp(wave*0.78 + 0.11 + bias, 0.0, 1.0));
@@ -364,24 +369,36 @@ const PRESET_DEFINITIONS = [
     col += mix(vec3(1.0), palette(0.8), 0.4) * sparks;
     return col;
   }` },
-  { name: 'runePulse', glsl: String.raw`  vec3 runePulse(vec2 uv, float t){
-    vec2 p = uv * rot(t*0.06);
-    float ring = circleLine(p, 0.75, 0.012) + circleLine(p, 0.46, 0.012);
-    float rays = 0.0;
-    float glyphs = 0.0;
-    for(int i=0;i<8;i++){
-      float fi = float(i);
-      float ang = fi/8.0 * TAU + t*0.07;
-      vec2 center = vec2(cos(ang), sin(ang)) * (0.56 + 0.03*sin(t+fi));
-      vec2 q = (p - center) * rot(-ang + PI*0.5) * 2.2;
-      glyphs += runeGlyph(q, fi + floor(t*0.5));
-      rays += glowLine(sdSegment(p, center*0.25, center), 0.008) * 0.24;
+  { name: 'runePulse', glsl: String.raw`
+  vec3 runePulse(vec2 p, float t){
+    // A dimensional aurora cradle around the original symbol. Continuous fields
+    // and antialiased filaments avoid the former random central glyph overlay.
+    vec2 q = rot(t*0.016) * p;
+    float r = length(q);
+    float breath = uSubAtt*0.018 + uBassAtt*0.025;
+    float n = fbm(q*1.65 + vec2(t*0.021,-t*0.015));
+    vec2 curl = vec2(sin(q.y*2.6+t*0.13+n*3.0),cos(q.x*2.3-t*0.11+n*2.0));
+    q += curl*(0.030+uFlow*0.035+uMidAtt*0.030);
+    float ribbons = 0.0;
+    for(int i=0;i<5;i++){
+      float fi=float(i);
+      float arc = 0.55+fi*0.094+breath
+        + sin(atan(q.y,q.x)*3.0+t*0.10+fi*1.3)*(0.016+uMidAtt*0.018)
+        + sin(atan(q.y,q.x)*7.0-t*0.08+fi)*0.008;
+      float d=length(q)-arc;
+      float aa=max(fwidth(d)*1.2,0.0015);
+      float core=1.0-smoothstep(0.0018,0.0018+aa,abs(d));
+      float haze=exp(-abs(d)/0.018)*0.12;
+      float sector=0.45+0.55*pow(0.5+0.5*sin(atan(q.y,q.x)*2.0-t*0.16+fi),2.0);
+      ribbons+=(core*0.14+haze)*sector*(0.68+uMidAtt*0.25);
     }
-    vec2 centerQ = p * rot(t*0.16) * 2.0;
-    float centerGlyph = runeGlyph(centerQ, floor(t*1.5)) * 1.2;
-    float dustField = dust(p * (1.1 + uDensity*0.12), t*0.55, uDensity) * 0.65;
-    vec3 col = palette(0.2 + seamlessAngle(p) + t*0.05) * (ring*0.18 + glyphs*0.22 + rays + centerGlyph*0.38);
-    col += palette(0.75) * dustField * (0.4 + uTreble*0.9);
+    float veil=smoothstep(0.28,0.68,n)*exp(-abs(r-0.72)*2.6);
+    float threads=pow(0.5+0.5*sin(n*36.0+r*6.0-t*0.25),12.0)*veil;
+    float halo=exp(-pow((r-0.62-breath)/0.23,2.0))*0.045;
+    float centerQuiet=smoothstep(0.12,0.56,r);
+    float motes=dust(q*0.95,t*0.14,uDensity*0.62)*(0.05+uTrebleAtt*0.16+uTreblePulse*0.12);
+    vec3 col=palette(0.30+seamlessAngle(q)*0.35+n*0.3+t*0.007)*(ribbons+veil*0.30+threads*0.36+halo)*centerQuiet;
+    col+=mix(palette(0.8),vec3(0.82,0.95,1.0),0.28)*motes*centerQuiet;
     return col;
   }` },
   { name: 'symbolForge', glsl: String.raw`  vec3 symbolForge(vec2 uv, float t){
@@ -582,49 +599,42 @@ const PRESET_DEFINITIONS = [
     return min(1.65, hTop+hMid+hBot+vLT+vLB+vRT+vRB+diagA+diagB+dot);
   }
 
+  vec3 matrixLayer(vec2 p, float mt, float layer){
+    float depth=0.72+layer*0.46;
+    vec2 q=p*depth;
+    q.x += (layer-1.0)*sin(uViewAngle)*(0.18+uPerspective*0.34);
+    q.y += (layer-1.0)*sin(uViewTilt)*0.25;
+    float columns=10.0+floor(uDensity*3.0);
+    float rows=14.0+floor(uDensity*2.0);
+    float xCell=(q.x+2.3)*columns;
+    float colId=floor(xCell);
+    float gx=fract(xCell)-0.5;
+    float seed=hash11(colId*3.71+layer*91.17);
+    // Column rates and phases never depend on instantaneous audio or mutation.
+    // The integrated clock carries all speed changes without teleporting drops.
+    float rate=0.16+seed*0.25;
+    float cycle=3.9;
+    float headY=1.95-mod(mt*rate+seed*cycle,cycle);
+    float behind=mod(q.y-headY+cycle,cycle);
+    float trail=exp(-behind*(2.0+seed*1.4));
+    float head=exp(-behind*25.0);
+    float yFlow=(q.y+mt*rate+seed*1.7)*rows;
+    float rowId=floor(yFlow);
+    vec2 gp=vec2(gx*0.78,(fract(yFlow)-0.5)*0.74);
+    float glyphSeed=colId*31.7+rowId*7.13+layer*113.0;
+    float glyph=digitalGlyph(gp,glyphSeed);
+    float flicker=0.89+0.11*sin(mt*1.2+glyphSeed);
+    float rain=glyph*flicker*(0.010+trail*0.88+head*0.92);
+    float phosphor=glowLine(gx,0.014)*trail*0.027;
+    float spark=exp(-dot(gp,gp)*110.0)*step(0.965,hash11(glyphSeed+44.0))*uTreblePulse*0.22;
+    vec3 green=mix(vec3(0.035,0.82,0.22),palette(0.16+q.y*0.035+uEvolution*0.006),0.05+uColorMix*0.15);
+    vec3 col=green*(rain+phosphor)*(0.68+uMidAtt*0.17+uTrebleAtt*0.10);
+    col+=vec3(0.72,1.0,0.82)*(glyph*head*0.28+spark);
+    return col*(layer<0.5 ? 0.82 : layer<1.5 ? 0.40 : 0.18);
+  }
   vec3 matrixLattice(vec2 p, float t){
-    float speedRatio = max(0.01, uSpeed / 0.88);
-    float matrixTempo = clamp(pow(speedRatio, 1.62), 0.022, 2.65);
-    float mt = t * matrixTempo;
-
-    float columns = 15.0 + floor(uDensity*4.0);
-    float rows = 16.0 + floor(uDensity*3.0);
-    float xCell = (p.x + 1.55) * columns;
-    float colId = floor(xCell);
-    float gx = fract(xCell) - 0.5;
-
-    float mutationBand = floor(uPatternShift*(0.30 + uRandomness*1.10));
-    float colSeed = hash11(colId*3.71 + mutationBand*9.17);
-    float dropRate = 0.095 + colSeed*0.23 + uTrebleAtt*0.045 + uFlow*0.018;
-
-    float headY = 1.36 - mod(mt*dropRate + colSeed*5.8, 2.78);
-    float trailDistance = mod(headY - p.y + 2.78, 2.78);
-    float trail = exp(-trailDistance*(1.65 + uDensity*0.18));
-    float head = exp(-trailDistance*23.0);
-
-    float yFlow = (p.y + mt*dropRate + colSeed*1.7) * rows;
-    float rowId = floor(yFlow);
-    float gy = fract(yFlow) - 0.5;
-    vec2 gp = vec2(gx*0.78, gy*0.74);
-    float glyphSeed = colId*31.7 + rowId*7.13 + mutationBand*(0.72+uRandomness*1.25);
-    float glyph = digitalGlyph(gp, glyphSeed);
-
-    float flickerStep = floor(mt*(0.55 + uTrebleAtt*0.85) + uPatternShift*0.08);
-    float flicker = 0.78 + 0.22*hash11(glyphSeed + flickerStep);
-    float rain = glyph * flicker * (0.08 + trail*1.02 + head*1.42);
-
-    float phosphor = glowLine(gx,0.017) * trail * 0.065;
-    float spark = exp(-dot(gp,gp)*110.0)
-      * step(0.92-uRandomness*0.05,hash11(glyphSeed+44.0))
-      * (0.10+uTreblePulse*0.58+uFlux*0.35);
-    float scan = glowLine(fract((p.y-mt*0.018)*14.0)-0.5,0.022)*0.013;
-
-    vec3 matrixGreen = vec3(0.035,0.92,0.24);
-    vec3 headGreen = vec3(0.76,1.0,0.84);
-    vec3 tinted = mix(matrixGreen, palette(0.16+p.y*0.045+mt*0.006), 0.06 + uColorMix*0.18);
-    vec3 col = tinted * (rain + phosphor + scan);
-    col += headGreen * glyph * head * (0.20 + uBeat*0.18);
-    col += headGreen * spark;
+    vec3 col=vec3(0.0);
+    for(int i=0;i<3;i++) col+=matrixLayer(p,uMatrixTime,float(i));
     return col;
   }` },
   { name: 'merkabaPrism', glsl: String.raw`  vec3 merkabaPrism(vec2 p, float t){
@@ -707,120 +717,25 @@ const PRESET_DEFINITIONS = [
     return max(col,vec3(0.0));
   }` },
   { name: 'frequencyTree', glsl: String.raw`
-  float treeTrunkField(vec2 p, float t){
-    float body = 0.0;
-    vec2 prev = vec2(0.0,-1.08);
-    for(int i=0;i<8;i++){
-      float fi=float(i);
-      float k=(fi+1.0)/8.0;
-      float sway=sin(t*0.16+fi*0.58+uPatternShift*0.018)*(0.004+uMidAtt*0.018+uFlow*0.010);
-      vec2 next=vec2(sway*k*k, mix(-1.08,0.27,k));
-      float width=mix(0.078,0.022,k)*(0.94+uBassAtt*0.24+uSubAtt*0.10);
-      body += glowLine(sdSegment(p,prev,next),width)*(1.08-k*0.20);
-      prev=next;
-    }
-    float core=glowLine(sdSegment(p,vec2(0.0,-1.02),vec2(0.0,0.18)),0.024)*(0.24+uBassPulse*0.16);
-    return body+core;
-  }
-
-  float treeBranchField(vec2 p, float t){
-    float field=0.0;
-    float crownEnergy=clamp(uBassAtt*0.34+uMidAtt*0.58+uTrebleAtt*0.90+uFlux*0.48,0.0,1.65);
-    float livingGrow=max(0.0,uTreeGrowth);
-    for(int b=0;b<12;b++){
-      float fb=float(b);
-      float side=-1.0;
-      if(b>=6) side=1.0;
-      float local=mod(fb,6.0);
-      float seed=hash11(fb*17.71+uSceneSeed*41.3+floor(uPatternShift*(0.08+uRandomness*0.42))*5.73);
-      float seed2=hash11(fb*29.17+uSceneSeed*13.9+3.17);
-      float originY=-0.18+local*0.085+seed2*0.055;
-      vec2 prev=vec2(0.0,originY);
-      float baseAngle=side*(0.46+local*0.075+seed*0.18);
-      float lane=mod(fb,3.0);
-      float bandDrive=uBassAtt*0.55+uBassPulse*0.36;
-      if(lane>0.5) bandDrive=uMidAtt*0.68+uMidPulse*0.44;
-      if(lane>1.5) bandDrive=uTrebleAtt*0.82+uTreblePulse*0.58+uFlux*0.28;
-      float branchGrow=livingGrow*(0.62+seed*0.34)+bandDrive*(0.72+seed2*0.40)+crownEnergy*0.22;
-      float segmentBase=(0.105+seed*0.032)*(1.0+min(livingGrow,10.0)*0.055);
-      float angle=baseAngle;
-      vec2 endpoint=prev;
-      float endpointVis=0.0;
-      for(int j=0;j<8;j++){
-        float fj=float(j);
-        float stage=fj*0.42+local*0.055;
-        float visible=smoothstep(stage-0.20,stage+0.12,branchGrow);
-        float audioTurn=(uMidPulse*(seed-0.5)*0.10+uTreblePulse*(seed2-0.5)*0.14+uFlux*(seed-0.5)*0.10);
-        float wave=sin(t*(0.12+seed*0.09)+fj*0.72+fb*0.61)*(0.010+uFlow*0.030+crownEnergy*0.012);
-        angle += side*(0.018+seed2*0.010)+audioTurn+wave;
-        vec2 dir=vec2(sin(angle),cos(angle));
-        vec2 next=prev+dir*segmentBase*(0.93+fj*0.045);
-        float taper=mix(0.017,0.0042,fj/7.0);
-        field += glowLine(sdSegment(p,prev,next),taper)*visible*(0.96-fj*0.045);
-
-        if(j==2 || j==5){
-          float twigVis=visible*smoothstep(stage+0.05,stage+0.42,branchGrow);
-          float twigSide=-side;
-          if(mod(fj+fb,2.0)>0.5) twigSide=side;
-          float twigAngle=angle+twigSide*(0.46+seed2*0.24);
-          vec2 twigEnd=next+vec2(sin(twigAngle),cos(twigAngle))*segmentBase*(0.72+seed*0.28);
-          field += glowLine(sdSegment(p,next,twigEnd),taper*0.58)*twigVis*0.62;
-        }
-        prev=next;
-        endpoint=next;
-        endpointVis=visible;
-      }
-      float bud=exp(-dot(p-endpoint,p-endpoint)/(0.0012+uTrebleAtt*0.0014));
-      field += bud*endpointVis*(0.020+uTreblePulse*0.050+uFlux*0.025);
-    }
-    return field;
-  }
-
-  float treeRootField(vec2 p, float t){
-    float roots=0.0;
-    for(int i=0;i<7;i++){
-      float fi=float(i);
-      float seed=hash11(fi*19.3+uSceneSeed*7.1);
-      float side=-1.0;
-      if(i>=4) side=1.0;
-      float angle=side*(0.32+seed*0.62);
-      vec2 prev=vec2((seed-0.5)*0.018,-0.98);
-      float len=0.30+uSubAtt*0.28+uBassAtt*0.14;
-      for(int j=0;j<4;j++){
-        float fj=float(j);
-        angle += side*(seed-0.5)*0.055+sin(t*0.12+fi+fj)*0.010;
-        vec2 next=prev+vec2(sin(angle),-abs(cos(angle)))*(len/4.0)*(0.92+fj*0.06);
-        roots += glowLine(sdSegment(p,prev,next),mix(0.016,0.005,fj/3.0))*(0.34+uSubPulse*0.28);
-        prev=next;
-      }
-    }
-    return roots;
-  }
-
   vec3 frequencyTree(vec2 uv, float t){
-    vec2 p=uv;
-    float body=treeTrunkField(p,t);
-    float branches=treeBranchField(p,t);
-    float roots=treeRootField(p,t);
-
-    float crownMask=smoothstep(-0.30,0.55,p.y)*(1.0-smoothstep(0.78,1.72,abs(p.x)));
-    float leaves=dust(p*vec2(0.92,0.86)+vec2(uPatternShift*0.0018,-t*0.006),t*0.12,uDensity*(0.54+uRandomness*0.22));
-    leaves*=crownMask*(0.035+uTrebleAtt*0.19+uTreblePulse*0.34+uFlux*0.16);
-
-    float crownHalo=circleLine(p-vec2(0.0,0.08),0.72+uBassAtt*0.035,0.006)*0.030;
-    crownHalo+=circleLine(p-vec2(0.0,0.08),0.50+uMidAtt*0.025,0.005)*0.022;
-    float heart=exp(-dot(p-vec2(0.0,-0.28),p-vec2(0.0,-0.28))*(58.0-uBassPulse*9.0))*(0.06+uBassPulse*0.18+uBeat*0.08);
-
-    vec3 wood=mix(vec3(0.30,0.115,0.055),palette(0.10+uPatternShift*0.004),0.40);
-    vec3 living=mix(vec3(0.24,0.84,0.54),palette(0.60+uCentroid*0.22),0.44);
-    vec3 aura=mix(vec3(0.55,0.82,1.0),palette(0.90),0.34);
-    vec3 col=wood*(body*0.82+roots*0.68+heart);
-    col+=living*(branches*0.72+leaves);
-    col+=aura*crownHalo*(0.36+uTrebleAtt*0.24+uFlux*0.14);
-    return col;
+    vec3 tree = max(texture2D(uTreeTexture, vUv).rgb, vec3(0.0));
+    tree = pow(tree, vec3(0.72));
+    vec2 p = uv;
+    float r = length(p*vec2(0.82,1.0));
+    float vign = 1.0-smoothstep(0.72,1.38,r);
+    float haze = exp(-r*r*1.75)*(0.010+uLevelAtt*0.012+uBassAtt*0.009);
+    float groundMist = exp(-abs(p.y+0.88)/(0.080+uBassAtt*0.010))*exp(-abs(p.x)*1.15)*0.012;
+    float motes = dust(p*0.72,t*0.024,uDensity*0.22)*(0.0015+uTrebleAtt*0.006+uFlux*0.005);
+    vec3 atmosphere = mix(vec3(0.006,0.006,0.010),palette(0.56+uCentroid*0.11),0.07)*(haze+groundMist);
+    atmosphere += mix(vec3(0.20,0.23,0.28),palette(0.82),0.08)*motes;
+    float branchGain = 1.04 + uLevelAtt*0.025 + uBassPulse*0.012 + uTreblePulse*0.010;
+    vec3 col = tree*branchGain*uTreePresence + atmosphere;
+    col *= 0.93 + vign*0.07;
+    col = col/(vec3(1.0)+max(col-0.78,vec3(0.0))*0.72);
+    return max(col,vec3(0.0));
   }
 ` },
-  { name: 'auroraVeil', glsl: String.raw`  vec3 auroraVeil(vec2 p, float t){
+  { name: 'auroraVeil' , glsl: String.raw`  vec3 auroraVeil(vec2 p, float t){
     vec2 q=p;
     float drift=t*(0.13+uFlow*0.06);
     float n=fbm(q*1.25+vec2(drift*0.35,-drift*0.12));
@@ -878,8 +793,8 @@ const PRESET_DEFINITIONS = [
     float d=sdSegment(f,c,n);
     float seed=hash21(id+off*7.3+vec2(mutation));
     float threshold=max(0.42,0.74-uRandomness*0.22-uMidAtt*0.10);
-    float active=1.0-smoothstep(0.28,threshold,seed);
-    return glowLine(d,0.010+uTreblePulse*0.004)*active*(0.10+uMidAtt*0.16+uFlux*0.10);
+    float linkActive=1.0-smoothstep(0.28,threshold,seed);
+    return glowLine(d,0.010+uTreblePulse*0.004)*linkActive*(0.10+uMidAtt*0.16+uFlux*0.10);
   }
 
   vec3 myceliumNetwork(vec2 p, float t){
@@ -958,6 +873,14 @@ function makePresetFragmentShader(index) {
     uv /= max(uZoom,0.05);
     float t = uTime;
     float sceneIndex = SCENE_INDEX_PLACEHOLDER;
+    // Inverse planar projection, bounded for every aspect ratio and zoom.
+    // Matrix retains a vertical world axis while view controls reveal parallax.
+    float planar = 1.0-step(17.5,sceneIndex)*step(sceneIndex,18.5);
+    float depth = clamp(1.0 + uPerspective*(uv.y*sin(uViewTilt)*0.48+uv.x*sin(uViewAngle)*0.34),0.52,1.65);
+    vec2 projected = vec2(uv.x/max(0.68,cos(uViewAngle)),uv.y/max(0.72,cos(uViewTilt)))/depth;
+    uv = mix(uv,projected,planar);
+    float isMatrix = step(13.5,sceneIndex)*step(sceneIndex,14.5);
+    uv = rot(uSpin*planar*(1.0-isMatrix))*uv;
     float randomPhase = uPatternShift * (0.32 + uRandomness*2.35);
     float patternCell = floor(randomPhase);
     float patternBlend = smoothstep(0.0,1.0,fract(randomPhase));
@@ -981,7 +904,8 @@ function makePresetFragmentShader(index) {
     uv /= reactiveZoom;
     uv *= 1.0 + uBassPulse * (0.010 + patternRnd*0.014) + uSubPulse*0.006;
 
-    vec3 col = PRESET_CALL_PLACEHOLDER(uv, t);
+    vec3 sceneCol = PRESET_CALL_PLACEHOLDER(uv, t);
+    vec3 col = sceneCol;
 
     float gate = smoothstep(0.026, 0.115, uLevel + uBeat*0.18 + uBass*0.07 + uLevelPulse*0.05 + uLevelAtt*0.11);
     float birth = smoothstep(0.0, 0.82, uGrowth);
@@ -990,9 +914,20 @@ function makePresetFragmentShader(index) {
     bandAccent += palette(0.18 + uTime*0.02) * uBassPulse * 0.042;
     bandAccent += palette(0.46 + uTime*0.02) * uMidPulse * 0.036;
     bandAccent += palette(0.78 + uTime*0.02) * uTreblePulse * 0.032;
-    col = col * (uIntensity * audioLift * birth) + bandAccent;
+    float isLivingTree = step(17.5,sceneIndex) * step(sceneIndex,18.5);
+    vec3 regularCol = col * (uIntensity * audioLift * birth) + bandAccent;
+    float treeExposure = 0.72 + uIntensity*0.46;
+    vec3 livingTreeCol = col * treeExposure + bandAccent*0.12;
+    col = mix(regularCol,livingTreeCol,isLivingTree);
+    // Rain keeps a quiet visible floor in silence; audio supplies the highlights.
+    if(isMatrix>0.5) col = sceneCol*uIntensity*(0.58+audioLift*birth*0.58)+bandAccent*0.28;
 
     col = max(col, vec3(0.0));
+    if(uAutoVisual>0.5){
+      col *= 0.90/(1.0+uLevelAtt*0.12);
+      float highlight=max(col.r,max(col.g,col.b));
+      col /= 1.0+max(highlight-0.85,0.0)*0.48;
+    }
     col = vec3(1.0) - exp(-col * 0.86);
     float safeContrast = clamp(0.95 + (uContrast-1.0)*0.54, 0.74, 1.36);
     col = (col - 0.42) * safeContrast + 0.42;
@@ -1004,7 +939,7 @@ function makePresetFragmentShader(index) {
   }
   `
     .replace('SCENE_INDEX_PLACEHOLDER', Number(index).toFixed(1))
-    .replace('PRESET_CALL_PLACEHOLDER', preset.name);
+    .replaceAll('PRESET_CALL_PLACEHOLDER', preset.name);
 }
 
 const fallbackFragmentShader = `
@@ -1199,8 +1134,141 @@ const motionEchoShader = {
 };
 
 
+const livingTreeVertexShader = `
+  precision highp float;
+  attribute float aEdge;
+  attribute float aAlpha;
+  attribute float aBand;
+  attribute float aKind;
+  varying float vEdge;
+  varying float vAlpha;
+  varying float vBand;
+  varying float vKind;
+  void main(){
+    vEdge=aEdge;
+    vAlpha=aAlpha;
+    vBand=aBand;
+    vKind=aKind;
+    gl_Position=vec4(position.xy,0.0,1.0);
+  }
+`;
+
+const livingTreeFragmentShader = `
+  precision highp float;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform float uBassAtt;
+  uniform float uMidAtt;
+  uniform float uTrebleAtt;
+  uniform float uFlux;
+  uniform float uLevelAtt;
+  uniform float uIntensity;
+  varying float vEdge;
+  varying float vAlpha;
+  varying float vBand;
+  varying float vKind;
+  void main(){
+    float edge=1.0-smoothstep(0.50,1.0,abs(vEdge));
+    float music=clamp(uBassAtt*0.26+uMidAtt*0.24+uTrebleAtt*0.24+uFlux*0.16+uLevelAtt*0.20,0.0,1.0);
+    vec3 spectral=mix(uColorA,uColorB,clamp(vBand,0.0,1.0));
+    vec3 bark=vec3(0.22,0.115,0.060);
+    vec3 root=vec3(0.13,0.075,0.045);
+    float living=smoothstep(0.35,1.0,vKind);
+    vec3 base=mix(mix(root,bark,smoothstep(0.0,0.45,vKind)),spectral,0.24+living*0.24);
+    // Deliberately restrained highlights: energy changes growth and motion before brightness.
+    float gain=mix(0.42,0.62,living)*(0.90+music*0.10)*clamp(0.55+uIntensity*0.22,0.52,0.96);
+    vec3 col=base*gain;
+    float alpha=edge*vAlpha*(0.88+music*0.08);
+    if(alpha<0.004) discard;
+    gl_FragColor=vec4(col,alpha);
+  }
+`;
+
+const livingTreeTipVertexShader = `
+  precision highp float;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aBand;
+  uniform float uPixelRatio;
+  varying float vAlpha;
+  varying float vBand;
+  void main(){
+    vAlpha=aAlpha;
+    vBand=aBand;
+    gl_Position=vec4(position.xy,0.0,1.0);
+    gl_PointSize=max(1.0,aSize*uPixelRatio);
+  }
+`;
+
+const livingTreeTipFragmentShader = `
+  precision highp float;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform float uTrebleAtt;
+  uniform float uFlux;
+  varying float vAlpha;
+  varying float vBand;
+  void main(){
+    vec2 q=gl_PointCoord-0.5;
+    float r=length(q)*2.0;
+    float a=1.0-smoothstep(0.18,1.0,r);
+    vec3 c=mix(uColorA,uColorB,clamp(vBand,0.0,1.0));
+    c=mix(vec3(0.56,0.48,0.40),c,0.38);
+    c*=0.46+min(0.12,uTrebleAtt*0.08+uFlux*0.05);
+    gl_FragColor=vec4(c,a*vAlpha);
+  }
+`;
+
+const cinematicGradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uAmount: { value: 0.20 },
+    uGrain: { value: 0.018 },
+    uVignette: { value: 0.18 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main(){
+      vUv=uv;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform float uAmount;
+    uniform float uGrain;
+    uniform float uVignette;
+    float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123); }
+    void main(){
+      vec3 col=texture2D(tDiffuse,vUv).rgb;
+      // Gentle highlight shoulder, preserving detail instead of clipping bright structures.
+      vec3 shoulder=col/(vec3(0.94)+col*0.10);
+      col=mix(col,shoulder,0.18*uAmount);
+      float l=dot(col,vec3(0.2126,0.7152,0.0722));
+      col=mix(col,vec3(l),0.035*uAmount);
+      vec2 p=vUv-0.5;
+      float vign=1.0-uVignette*smoothstep(0.20,0.72,dot(p,p));
+      col*=vign;
+      float g=(hash(gl_FragCoord.xy+vec2(fract(uTime)*97.3,fract(uTime*0.73)*61.7))-0.5)*uGrain;
+      col+=g;
+      gl_FragColor=vec4(clamp(col,0.0,1.0),1.0);
+    }
+  `
+};
+
+const TREE_PRESET_INDEX = 18;
+const TREE_MAX_SEGMENTS = 2400;
+const TREE_MAX_TIPS = 64;
+const TREE_INITIAL_LIMBS = 12;
+
+
 const QUALITY_SCALE = {
   performance: 0.72,
+  cinematic: 0.86,
   high: 0.96,
   ultra: 1.18
 };
@@ -1234,11 +1302,36 @@ export class VisualEngine {
     this.logoFxPulse = false;
     this.logoFxSpin = false;
     this.logoFxColor = false;
+    this.autoVisual = false;
+    this.manualSpinAngle = 0;
+    this.manualSpinVelocity = 0;
+    this.autoLogo = false;
+    this.logoAutoAngle = 0;
+    this.logoAutoHue = 0;
+    this.logoPaletteMix = 0.5;
+    this.logoManualAngle = 0;
+    this.autoBeatSerial = 0;
+    this.autoBeatPeriod = 0.5;
+    this.autoBeatArrival = performance.now();
+    this.autoTransition = null;
+    this.lastVisualCueId = null;
+    this.warmedPresets = new Set();
     this.colorMix = 0.5;
     this.bloomStrength = 0.88;
     this.targetSpeed = 0.88;
     this.displaySpeed = 0.88;
     this.timePhase = 0;
+    this.matrixPhase = 0;
+    this.evolutionPhase = 0;
+    this.spinEnabled = false;
+    this.spinSpeed = 0.20;
+    this.spinVelocity = 0;
+    this.spinAngle = 0;
+    this.viewAngle = 0;
+    this.viewTilt = 0;
+    this.perspective = 0;
+    this.audioTargets = {};
+    this.lastAudioAt = performance.now();
     this.lastFrameTime = performance.now();
     this.patternShift = 0;
     this.lastBeatFrame = 0;
@@ -1267,6 +1360,14 @@ export class VisualEngine {
     this.frameRandomTarget = 0.5;
     this.treeGrowth = 0.28;
     this.treeGrowthVelocity = 0;
+    this.treeSegments = [];
+    this.treeTips = [];
+    this.treeTipSerial = 0;
+    this.treeGeneration = 0;
+    this.treeSeed = 0.731;
+    this.treeEnergy = 0;
+    this.treeBranchDecision = 0;
+    this.treeGeometryDirty = true;
     this.adaptiveQuality = true;
     this.adaptiveScale = 1.0;
     this.performanceFrames = 0;
@@ -1298,7 +1399,7 @@ export class VisualEngine {
       powerPreference: 'high-performance',
       alpha: false,
       stencil: false,
-      depth: false
+      depth: true
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.debug.checkShaderErrors = true;
@@ -1331,9 +1432,14 @@ ${fragmentLog}`;
     };
 
     this.camera = new THREE.Camera();
+    // Safe black texture used until the 3D tree render target is initialized.
+    this.treeFallbackTexture = new THREE.DataTexture(new Uint8Array([0,0,0,255]), 1, 1, THREE.RGBAFormat);
+    this.treeFallbackTexture.needsUpdate = true;
     this.uniforms = {
       uResolution: { value: new THREE.Vector2(1, 1) },
       uTime: { value: 0 },
+      uMatrixTime: { value: 0 }, uEvolution: { value: 0 }, uSpin: { value: 0 },
+      uViewAngle: { value: 0 }, uViewTilt: { value: 0 }, uPerspective: { value: 0 },
       uSub: { value: 0 },
       uBass: { value: 0 },
       uMid: { value: 0 },
@@ -1348,6 +1454,7 @@ ${fragmentLog}`;
       uFlux: { value: 0 },
       uCentroid: { value: 0.5 },
       uIntensity: { value: 1.08 },
+      uBranchGrowth: { value: 0.55 }, uAutoVisual: { value: 0 },
       uContrast: { value: 1.1 },
       uZoom: { value: 1 },
       uSpeed: { value: 0.82 },
@@ -1374,6 +1481,8 @@ ${fragmentLog}`;
       uSceneSeed: { value: 0.314159 },
       uFrameRandom: { value: 0.5 },
       uTreeGrowth: { value: 0.28 },
+      uTreeTexture: { value: this.treeFallbackTexture },
+      uTreePresence: { value: 1.0 },
       uColorA: { value: new THREE.Color('#6c4cff') },
       uColorB: { value: new THREE.Color('#00d9ff') }
     };
@@ -1392,7 +1501,9 @@ ${fragmentLog}`;
       toneMapped: false
     });
     this.presetMesh = new THREE.Mesh(this.geometry, this.getPresetMaterial(this.currentPreset));
+    this.presetMesh.renderOrder = 0;
     this.presetScene.add(this.presetMesh);
+    this.setupLivingTree();
 
     const targetOptions = {
       depthBuffer: false,
@@ -1439,6 +1550,7 @@ ${fragmentLog}`;
     this.bloomPass = null;
     this.afterimagePass = null;
     this.motionEchoPass = null;
+    this.cinematicPass = null;
 
     // Lightweight audio waveform overlay with multiple procedural drawing modes.
     this.waveformCanvas = document.createElement('canvas');
@@ -1471,6 +1583,47 @@ ${fragmentLog}`;
     this.resize();
   }
 
+
+  // Preset 18 uses an isolated 3D filament renderer. Other worlds remain
+  // modular shaders, sharing the musical envelopes and perspective controls.
+  setupLivingTree() {
+    this.arcaneTree = new ArcaneLivingTree(this.renderer, this.uniforms);
+    this.treeRenderTarget = this.arcaneTree.target;
+    this.tree3DCamera = this.arcaneTree.camera;
+    this.treeLastRenderRelevant = false;
+    this.resizeLivingTreeTarget();
+  }
+
+  updateLivingTree(dt) {
+    const relevant = this.currentPreset === TREE_PRESET_INDEX ||
+      this.targetPreset === TREE_PRESET_INDEX ||
+      (this.transitionActive &&
+        (Math.round(this.uniforms.uPresetFrom.value) === TREE_PRESET_INDEX ||
+         Math.round(this.uniforms.uPresetTo.value) === TREE_PRESET_INDEX));
+    this.treeLastRenderRelevant = relevant;
+    if (!relevant || !this.arcaneTree) return;
+    this.arcaneTree.update(dt, this);
+    this.treeGrowth = this.arcaneTree.u.uGrowth.value;
+    this.uniforms.uTreeGrowth.value = this.treeGrowth;
+  }
+
+  setTreeRenderVisible() {
+    // Three.js is composited only through the existing preset-18 tree texture.
+  }
+
+  resizeLivingTreeTarget() {
+    if (!this.arcaneTree) return;
+    this.arcaneTree.resize(Math.max(1, this.container.clientWidth),
+      Math.max(1, this.container.clientHeight), this.renderer.getPixelRatio(), this.quality);
+  }
+
+  renderLivingTreeTexture() {
+    if (!this.treeLastRenderRelevant || !this.arcaneTree) return;
+    this.arcaneTree.render(this);
+    this.uniforms.uTreeTexture.value = this.arcaneTree.target.texture;
+    this.uniforms.uTreePresence.value = 1;
+  }
+
   getPresetMaterial(index) {
     const key = clamp(Math.round(index), 0, PRESET_DEFINITIONS.length - 1);
     if (this.materialCache.has(key)) return this.materialCache.get(key);
@@ -1491,6 +1644,7 @@ ${fragmentLog}`;
     this.activeRenderingPreset = key;
     this.uniforms.uSceneSeed.value = hashNumber((key + 1) * 19.73);
     this.presetMesh.material = this.failedPresets.has(key) ? this.fallbackMaterial : this.getPresetMaterial(key);
+    this.setTreeRenderVisible(key);
     this.renderer.setRenderTarget(target);
     this.renderer.clear();
     this.renderer.render(this.presetScene, this.camera);
@@ -1512,11 +1666,14 @@ ${fragmentLog}`;
     this.motionEchoPass.enabled = this.quality !== 'performance' && (this.memoryWarp > 0.001 || this.echoZoom > 0.001);
     this.afterimagePass = new AfterimagePass(0.90);
     this.afterimagePass.enabled = this.feedback > 0.001 && this.quality !== 'performance';
+    this.cinematicPass = new ShaderPass(cinematicGradeShader);
     this.composer.addPass(this.renderPass);
     this.composer.addPass(this.motionEchoPass);
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(this.afterimagePass);
+    this.composer.addPass(this.cinematicPass);
     this.updateFeedbackSettings();
+    this.updateCinematicSettings();
   }
 
   async prepare(options = {}) {
@@ -1575,10 +1732,30 @@ ${fragmentLog}`;
 
   updateBloomSettings() {
     if (!this.bloomPass) return;
-    const qualityGain = this.quality === 'performance' ? 0.72 : this.quality === 'ultra' ? 1.05 : 0.92;
+    const treeFocus = this.currentPreset === TREE_PRESET_INDEX || this.targetPreset === TREE_PRESET_INDEX;
+    let qualityGain = this.quality === 'performance' ? 0.70 : this.quality === 'cinematic' ? 0.66 : this.quality === 'ultra' ? 1.02 : 0.90;
+    let radius = this.quality === 'performance' ? 0.42 : this.quality === 'cinematic' ? 0.40 : this.quality === 'ultra' ? 0.58 : 0.52;
+    let threshold = this.quality === 'performance' ? 0.32 : this.quality === 'cinematic' ? 0.42 : 0.29;
+    if (treeFocus) {
+      qualityGain *= 0.76;
+      radius = 0.54;
+      threshold = 0.19;
+    }
     this.bloomPass.strength = this.bloomStrength * qualityGain;
-    this.bloomPass.radius = this.quality === 'performance' ? 0.46 : this.quality === 'ultra' ? 0.62 : 0.55;
-    this.bloomPass.threshold = this.quality === 'performance' ? 0.29 : 0.25;
+    this.bloomPass.radius = radius;
+    this.bloomPass.threshold = threshold;
+  }
+
+  updateCinematicSettings() {
+    if (!this.cinematicPass) return;
+    const treeFocus = this.currentPreset === TREE_PRESET_INDEX || this.targetPreset === TREE_PRESET_INDEX;
+    const cinematic = this.quality === 'cinematic';
+    this.cinematicPass.enabled = this.quality !== 'performance';
+    const u = this.cinematicPass.uniforms;
+    if (u.uTime) u.uTime.value = this.timePhase;
+    if (u.uAmount) u.uAmount.value = cinematic ? 0.78 : treeFocus ? 0.50 : 0.22;
+    if (u.uGrain) u.uGrain.value = cinematic ? 0.022 : treeFocus ? 0.014 : 0.008;
+    if (u.uVignette) u.uVignette.value = cinematic ? 0.22 : treeFocus ? 0.16 : 0.10;
   }
 
   updateFeedbackSettings() {
@@ -1589,7 +1766,7 @@ ${fragmentLog}`;
       if (enabled) {
         const macro = this.uniforms?.uLevelAtt?.value ?? 0;
         const damp = clamp(0.70 + this.feedback * 0.27 + macro * this.feedback * 0.015, 0.70, 0.985);
-        if (this.afterimagePass.uniforms?.damp) this.afterimagePass.uniforms.damp.value = damp;
+        if (this.afterimagePass.uniforms?.damp) this.afterimagePass.uniforms.damp.value = Math.pow(damp,(this.frameDt || 1/60)*60);
       }
     }
     if (this.motionEchoPass) {
@@ -1746,6 +1923,7 @@ ${fragmentLog}`;
     this.applyPixelRatio();
     this.updateBloomSettings();
     this.updateFeedbackSettings();
+    this.updateCinematicSettings();
     this.resize(true);
   }
 
@@ -1816,35 +1994,44 @@ ${fragmentLog}`;
   setState(state = {}) {
     this.lastState = { ...this.lastState, ...state };
     const u = this.uniforms;
-    if (state.sub != null) u.uSub.value += (state.sub - u.uSub.value) * 0.32;
-    if (state.bass != null) u.uBass.value += (state.bass - u.uBass.value) * 0.32;
-    if (state.mid != null) u.uMid.value += (state.mid - u.uMid.value) * 0.26;
-    if (state.treble != null) u.uTreble.value += (state.treble - u.uTreble.value) * 0.28;
-    if (state.level != null) u.uLevel.value += (state.level - u.uLevel.value) * 0.30;
-    if (state.beat != null) u.uBeat.value = Math.max(state.beat, u.uBeat.value * 0.84);
-    if (state.subPulse != null) u.uSubPulse.value = Math.max(state.subPulse, u.uSubPulse.value * 0.87);
-    if (state.bassPulse != null) u.uBassPulse.value = Math.max(state.bassPulse, u.uBassPulse.value * 0.88);
-    if (state.midPulse != null) u.uMidPulse.value = Math.max(state.midPulse, u.uMidPulse.value * 0.86);
-    if (state.treblePulse != null) u.uTreblePulse.value = Math.max(state.treblePulse, u.uTreblePulse.value * 0.84);
-    if (state.levelPulse != null) u.uLevelPulse.value = Math.max(state.levelPulse, u.uLevelPulse.value * 0.87);
-    if (state.subAtt != null) u.uSubAtt.value += (state.subAtt - u.uSubAtt.value) * 0.22;
-    if (state.bassAtt != null) u.uBassAtt.value += (state.bassAtt - u.uBassAtt.value) * 0.22;
-    if (state.midAtt != null) u.uMidAtt.value += (state.midAtt - u.uMidAtt.value) * 0.20;
-    if (state.trebleAtt != null) u.uTrebleAtt.value += (state.trebleAtt - u.uTrebleAtt.value) * 0.20;
-    if (state.levelAtt != null) u.uLevelAtt.value += (state.levelAtt - u.uLevelAtt.value) * 0.22;
-    if (state.flux != null) u.uFlux.value += (state.flux - u.uFlux.value) * 0.30;
-    if (state.centroid != null) u.uCentroid.value += (state.centroid - u.uCentroid.value) * 0.18;
+    if(state.autoVisual!=null){
+      const next=Boolean(state.autoVisual);
+      if(next&&!this.autoVisual){
+        this.pendingPreset=null;
+        this.manualSpinAngle=this.spinAngle;this.manualSpinVelocity=this.spinVelocity;
+      }else if(!next&&this.autoVisual){
+        this.spinAngle=this.manualSpinAngle;this.spinVelocity=this.manualSpinVelocity;
+        u.uSpin.value=this.spinAngle;
+      }
+      this.autoVisual=next;u.uAutoVisual.value=this.autoVisual?1:0;
+      if(!this.autoVisual){this.autoTransition=null;this.lastVisualCueId=null;}
+    }
+    if(state.autoLogo!=null&&Boolean(state.autoLogo)!==this.autoLogo){
+      if(state.autoLogo)this.logoManualAngle=this.logoSpinAngle;
+      else this.logoSpinAngle=this.logoManualAngle;
+      this.autoLogo=Boolean(state.autoLogo);
+    }
+    if(state.logoAutoAngle!=null)this.logoAutoAngle=finite(state.logoAutoAngle);
+    if(state.logoAutoHue!=null)this.logoAutoHue=finite(state.logoAutoHue);
+    if(state.logoPaletteMix!=null)this.logoPaletteMix=clamp(finite(state.logoPaletteMix,.5),0,1);
+    if(state.autoBeatSerial!=null&&state.autoBeatSerial!==this.autoBeatSerial){this.autoBeatSerial=state.autoBeatSerial;this.autoBeatArrival=performance.now();}
+    if(state.autoBeatPeriod!=null)this.autoBeatPeriod=clamp(finite(state.autoBeatPeriod,.5),.25,1.5);
+    let audioUpdate = false;
+    for (const name of ['sub','bass','mid','treble','level','beat','subPulse','bassPulse','midPulse','treblePulse','levelPulse','subAtt','bassAtt','midAtt','trebleAtt','levelAtt','flux','centroid']) {
+      if(state[name] != null) { this.audioTargets[name] = clamp(finite(state[name]),0,1.7); audioUpdate = true; }
+    }
+    if(audioUpdate) this.lastAudioAt = performance.now();
 
-    const signal = Math.max(u.uLevel.value, u.uBeat.value * 0.7, u.uBass.value * 0.55);
-    const targetGrowth = signal > 0.045 ? Math.min(1, signal * 1.78 + 0.10) : 0;
-    this.growth += (targetGrowth - this.growth) * (signal > 0.045 ? 0.060 : 0.060);
-    this.growth = clamp(this.growth, 0, 1);
-    u.uGrowth.value = this.growth;
-
+    if (state.treeGrowth != null) u.uBranchGrowth.value = clamp(finite(state.treeGrowth,.55),0,1);
     if (state.intensity != null) u.uIntensity.value = Number(state.intensity);
     if (state.contrast != null) u.uContrast.value = Number(state.contrast);
     if (state.zoom != null) u.uZoom.value = Number(state.zoom);
-    if (state.speed != null) this.targetSpeed = Number(state.speed);
+    if (state.speed != null) this.targetSpeed = clamp(finite(state.speed,0.88),0.02,3);
+    if (state.spinEnabled != null) this.spinEnabled = Boolean(state.spinEnabled);
+    if (state.spinSpeed != null) this.spinSpeed = clamp(finite(state.spinSpeed,0.20),0,1);
+    if (state.viewAngle != null) this.viewAngle = clamp(finite(state.viewAngle),-45,45);
+    if (state.viewTilt != null) this.viewTilt = clamp(finite(state.viewTilt),-35,35);
+    if (state.perspective != null) this.perspective = clamp(finite(state.perspective),0,1);
     if (state.density != null) u.uDensity.value = Number(state.density);
     if (state.transitionMode != null) this.transitionMode = String(state.transitionMode);
     if (state.transitionSpeed != null) this.transitionSpeed = clamp(Number(state.transitionSpeed), -10, 10);
@@ -1859,7 +2046,7 @@ ${fragmentLog}`;
     if (state.waveformMode != null) this.waveformMode = String(state.waveformMode);
     if (state.waveformGain != null) this.waveformGain = clamp(Number(state.waveformGain), 0, 1.5);
     if (state.adaptiveQuality != null) this.setAdaptiveQuality(state.adaptiveQuality);
-    if (state.preset != null) this.queuePreset(Number(state.preset));
+    if (state.preset != null && (!this.autoVisual||!this.presetInitialized)) this.queuePreset(Number(state.preset));
     if (state.colorA) u.uColorA.value.set(state.colorA);
     if (state.colorB) u.uColorB.value.set(state.colorB);
     if (state.colorMix != null) { this.colorMix = Number(state.colorMix); u.uColorMix.value = this.colorMix; }
@@ -1868,6 +2055,15 @@ ${fragmentLog}`;
       this.bloomStrength = clamp(Number(state.bloom), 0, 1.65);
       this.updateBloomSettings();
     }
+
+    if(this.autoVisual&&state.visualCue&&state.visualCue.id!==this.lastVisualCueId){
+      const cue=state.visualCue;
+      this.lastVisualCueId=cue.id;
+      this.startPresetTransition(cue.preset);
+      this.transitionDuration=cue.period*cue.beats;
+      this.autoTransition={...cue};
+    }
+    if(this.autoVisual&&state.autoPreparePreset!=null)this.warmPreset(state.autoPreparePreset);
 
     const logoCopiesChanged = state.logoCopies != null && Number(state.logoCopies) !== this.logoCopies;
     if (state.logoEnabled != null) this.logoEnabled = Boolean(state.logoEnabled);
@@ -1894,6 +2090,19 @@ ${fragmentLog}`;
     else if (logoCopiesChanged) this.ensureLogoNodes();
   }
 
+  warmPreset(index) {
+    const key=clamp(Math.round(index),0,PRESET_DEFINITIONS.length-1);
+    if(this.warmedPresets.has(key))return;
+    this.warmedPresets.add(key);
+    const scene=new THREE.Scene();
+    const mesh=new THREE.Mesh(this.geometry,this.getPresetMaterial(key));scene.add(mesh);
+    const compile=this.renderer.compileAsync?this.renderer.compileAsync(scene,this.camera):Promise.resolve(this.renderer.compile(scene,this.camera));
+    compile.catch(error=>console.warn('Auto scene warmup skipped:',error));
+    if(key===TREE_PRESET_INDEX&&this.arcaneTree&&this.renderer.compileAsync){
+      this.renderer.compileAsync(this.arcaneTree.scene,this.arcaneTree.camera).catch(error=>console.warn('Tree warmup skipped:',error));
+    }
+  }
+
   transitionModeIndex() {
     const modes = { morph: 0, dissolve: 1, radial: 2, prism: 3, ecosystem: 4 };
     return modes[this.transitionMode] ?? 0;
@@ -1915,6 +2124,8 @@ ${fragmentLog}`;
       this.uniforms.uPresetTo.value = next;
       this.uniforms.uTransitionMix.value = 1;
       this.uniforms.uTransitionActive.value = 0;
+      this.updateBloomSettings();
+      this.updateCinematicSettings();
       return;
     }
     if (next === this.targetPreset && (this.transitionActive || this.pendingPreset == null)) return;
@@ -1931,6 +2142,7 @@ ${fragmentLog}`;
     this.transitionActive = this.currentPreset !== this.targetPreset;
     this.transitionStart = now;
     this.transitionDuration = this.transitionDurationFromSpeed();
+    this.autoTransition = null;
     this.transitionSeed = (this.currentPreset + 1) * 17.31 + (this.targetPreset + 1) * 29.73;
     this.uniforms.uPreset.value = next;
     this.uniforms.uPresetFrom.value = this.currentPreset;
@@ -1939,6 +2151,8 @@ ${fragmentLog}`;
     this.uniforms.uTransitionSeed.value = this.transitionSeed;
     this.uniforms.uTransitionMix.value = this.transitionActive ? 0 : 1;
     this.uniforms.uTransitionActive.value = this.transitionActive ? 1 : 0;
+    this.updateBloomSettings();
+    this.updateCinematicSettings();
     this.pendingPreset = null;
   }
 
@@ -1953,6 +2167,12 @@ ${fragmentLog}`;
     if (!this.transitionActive) return;
     const elapsed = (now - this.transitionStart) / 1000;
     let p = clamp(elapsed / Math.max(0.001, this.transitionDuration), 0, 1);
+    if(this.autoVisual&&this.autoTransition){
+      const cue=this.autoTransition;
+      const beatPhase=clamp((now-this.autoBeatArrival)/(this.autoBeatPeriod*1000),0,0.90);
+      p=clamp((this.autoBeatSerial-cue.startBeat+beatPhase)/cue.beats,0,1);
+      this.uniforms.uTransitionMode.value=this.transitionModeIndex();
+    }
     // Smoothstep timing. Audio changes the spatial transition field, not the timeline itself.
     p = p*p*(3-2*p);
     this.uniforms.uTransitionMix.value = p;
@@ -1960,10 +2180,13 @@ ${fragmentLog}`;
     if (p >= 0.999) {
       this.currentPreset = this.targetPreset;
       this.transitionActive = false;
+      this.autoTransition = null;
       this.uniforms.uPresetFrom.value = this.currentPreset;
       this.uniforms.uPresetTo.value = this.currentPreset;
       this.uniforms.uTransitionMix.value = 1;
       this.uniforms.uTransitionActive.value = 0;
+      this.updateBloomSettings();
+      this.updateCinematicSettings();
     }
   }
 
@@ -1985,6 +2208,7 @@ ${fragmentLog}`;
     this.composer?.setSize(width, height);
     this.bloomPass?.setSize(width, height);
     this.uniforms.uResolution.value.set(width * ratio, height * ratio);
+    this.resizeLivingTreeTarget();
   }
 
   updateLogos(time) {
@@ -2017,7 +2241,7 @@ ${fragmentLog}`;
     const spread = this.logoSpread * 38;
     const count = this.logoNodes.length;
     const maxDimension = Math.max(10, Math.min(this.containerWidth, this.containerHeight) * clamp(this.logoSize, 0.02, 1));
-    const hueBase = (time * 14 + bassPulse * 160 + treblePulse * 240 + midPulse * 70) % 360;
+    const hueBase = this.autoLogo ? this.logoAutoHue : (time * 14 + bassPulse * 160 + treblePulse * 240 + midPulse * 70) % 360;
     const glowPx = 2 + this.logoGlow * 24;
     const glowAlpha = 0.04 + this.logoGlow * 0.30;
 
@@ -2050,7 +2274,7 @@ ${fragmentLog}`;
 
       const scaleBoost = this.logoFxPulse ? (1 + bassPulse * 0.22 + beat * 0.13 + level * 0.05) : 1;
       const scale = scaleBoost;
-      const rot = this.logoSpinAngle + (this.logoMode === 'single' ? 0 : index * 7);
+      const rot = this.logoSpinAngle + (this.autoLogo?this.logoAutoAngle:0) + (this.logoMode === 'single' ? 0 : index * 7);
       const hue = this.logoFxColor ? (hueBase + index * (360 / Math.max(1, count))) : 0;
 
       // Preserve the source aspect ratio. "Size" controls the largest dimension.
@@ -2077,12 +2301,12 @@ ${fragmentLog}`;
         const colorShift = this.logoFxColor ? ` hue-rotate(${hue.toFixed(1)}deg)` : '';
         node.style.filter = `brightness(0) invert(1)${colorShift} brightness(${(1.0 + level*0.08).toFixed(2)}) ${shadow}`;
       } else if (this.logoColorMode === 'reactive') {
-        const reactiveHue = this.logoFxColor ? hue : (205 + this.colorMix * 110);
+        const reactiveHue = this.logoFxColor ? hue : (205 + this.logoPaletteMix * 110);
         node.style.filter = `brightness(0) saturate(100%) invert(72%) sepia(82%) saturate(${(4.2 + treblePulse*2.4).toFixed(2)}) hue-rotate(${reactiveHue.toFixed(1)}deg) brightness(${(1.0 + level*0.10 + beat*0.08).toFixed(2)}) ${shadow}`;
       } else {
         // ORIGINAL: never flatten the RGB channels. Photos and arbitrary PNG/WebP stay intact.
         const hueShift = this.logoFxColor ? `hue-rotate(${hue.toFixed(1)}deg)` : 'hue-rotate(0deg)';
-        node.style.filter = `${hueShift} saturate(${(1.0 + (this.logoFxColor ? treblePulse*0.22 : 0)).toFixed(2)}) brightness(${(1.0 + level*0.035).toFixed(2)}) ${shadow}`;
+        node.style.filter = `${hueShift} saturate(${(1.0 + (this.logoFxColor ? treblePulse*0.22 : 0)).toFixed(2)}) brightness(${(1.0 + (this.logoFxColor||this.logoFxPulse||this.logoFxBlink?level*0.035:0)).toFixed(2)}) ${shadow}`;
       }
     });
   }
@@ -2124,26 +2348,46 @@ ${fragmentLog}`;
     const gate = clamp((level - 0.028) * 5.5 + beat * 0.55 + bassPulse * 0.22, 0, 1) * this.growth;
 
     // Low frequencies make the symbol breathe, mids drive its rotation, highs excite the aura.
-    const targetSpin = (0.9 + mid*1.8 + midPulse*2.6) * (0.55 + level*0.55);
-    this.runeAngle += dt * targetSpin * 10.0;
-    this.runeEchoAngle -= dt * (0.45 + treble*1.2 + treblePulse*2.0) * 8.0;
+    this.runeAngle += dt * (this.spinVelocity * 180 / Math.PI + (0.35+mid*0.40)*clamp(this.displaySpeed/0.88,0.03,2.0));
+    this.runeEchoAngle = this.runeAngle + Math.sin(time*0.14)*1.8;
 
     const coreScale = 0.82 + bass*0.055 + bassPulse*0.13 + beat*0.055;
-    const echoScale = coreScale * (1.04 + treblePulse*0.08 + beat*0.035);
+    const echoScale = coreScale * (1.012 + treblePulse*0.018 + beat*0.010);
     const opacity = clamp(gate * 0.88 * runeWeight, 0, 0.90);
-    const echoOpacity = clamp(gate * (0.20 + treblePulse*0.34 + beat*0.14) * runeWeight, 0, 0.55);
+    const echoOpacity = clamp(gate * (0.12 + treblePulse*0.18 + beat*0.06) * runeWeight, 0, 0.55);
     const hue = (time * 8 + bassPulse * 80 + midPulse * 120 + treblePulse * 210) % 360;
-    const sat = 0.20 + treblePulse * 1.3;
     const bright = 1.05 + level*0.12 + beat*0.10;
 
+    const tilt = this.uniforms.uViewTilt.value * 180 / Math.PI;
+    const yaw = this.uniforms.uViewAngle.value * 180 / Math.PI;
+    const lens = Math.min(this.containerWidth,this.containerHeight)*(4.0-this.uniforms.uPerspective.value*2.4);
+    const projection = `perspective(${Math.max(180,lens).toFixed(0)}px) rotateX(${tilt.toFixed(2)}deg) rotateY(${yaw.toFixed(2)}deg)`;
     this.runeWrap.style.opacity = `${opacity.toFixed(3)}`;
     this.runeNode.style.opacity = '1';
-    this.runeNode.style.transform = `translate(-50%, -50%) scale(${coreScale.toFixed(3)}) rotate(${this.runeAngle.toFixed(2)}deg)`;
+    this.runeNode.style.transform = `translate(-50%, -50%) ${projection} scale(${coreScale.toFixed(3)}) rotate(${this.runeAngle.toFixed(2)}deg)`;
     this.runeNode.style.filter = `brightness(0) saturate(100%) invert(78%) sepia(85%) saturate(${(4.2 + treblePulse*3.0).toFixed(2)}) hue-rotate(${hue.toFixed(1)}deg) brightness(${bright.toFixed(2)}) drop-shadow(0 0 18px rgba(255,255,255,0.18))`;
 
     this.runeEcho.style.opacity = `${echoOpacity.toFixed(3)}`;
-    this.runeEcho.style.transform = `translate(-50%, -50%) scale(${echoScale.toFixed(3)}) rotate(${this.runeEchoAngle.toFixed(2)}deg)`;
+    this.runeEcho.style.transform = `translate(-50%, -50%) ${projection} scale(${echoScale.toFixed(3)}) rotate(${this.runeEchoAngle.toFixed(2)}deg)`;
     this.runeEcho.style.filter = `brightness(0) saturate(100%) invert(74%) sepia(90%) saturate(${(5.2 + treblePulse*3.5).toFixed(2)}) hue-rotate(${(hue+55).toFixed(1)}deg) brightness(${(bright+0.03).toFixed(2)}) blur(${(0.4 + treblePulse*1.2).toFixed(2)}px) drop-shadow(0 0 28px rgba(255,255,255,0.20))`;
+  }
+
+  updateAudioEnvelopes(dt, now) {
+    const stale = now-this.lastAudioAt>650;
+    for(const [name,value] of Object.entries(this.audioTargets)) {
+      const key='u'+name[0].toUpperCase()+name.slice(1);
+      const uniform=this.uniforms[key];
+      if(!uniform) continue;
+      const pulse=name.endsWith('Pulse')||name==='beat';
+      const macro=name.endsWith('Att');
+      const target=stale&&name!=='centroid' ? 0 : value;
+      uniform.value=approach(uniform.value,target,dt,pulse?28:macro?8:14,pulse?12:macro?3.6:7);
+    }
+    const u=this.uniforms;
+    const signal=Math.max(u.uLevel.value,u.uBeat.value*0.7,u.uBass.value*0.55);
+    const target=signal>0.045?Math.min(1,signal*1.78+0.10):0;
+    this.growth=approach(this.growth,target,dt,3.6,2.8);
+    u.uGrowth.value=this.growth;
   }
 
   render = () => {
@@ -2151,7 +2395,15 @@ ${fragmentLog}`;
     const now = performance.now();
     const dt = Math.min(0.05, Math.max(0.001, (now - this.lastFrameTime) / 1000));
     this.lastFrameTime = now;
+    this.frameDt = dt;
     this.updatePerformance(dt, now);
+    this.updateAudioEnvelopes(dt, now);
+    this.spinVelocity=approach(this.spinVelocity,this.spinEnabled?spinRadiansPerSecond(this.spinSpeed):0,dt,3.5);
+    this.spinAngle=(this.spinAngle+this.spinVelocity*dt)%(Math.PI*2);
+    this.uniforms.uSpin.value=this.spinAngle;
+    this.uniforms.uViewAngle.value=approach(this.uniforms.uViewAngle.value,THREE.MathUtils.degToRad(this.viewAngle),dt,5);
+    this.uniforms.uViewTilt.value=approach(this.uniforms.uViewTilt.value,THREE.MathUtils.degToRad(this.viewTilt),dt,5);
+    this.uniforms.uPerspective.value=approach(this.uniforms.uPerspective.value,this.perspective,dt,5);
 
     this.displaySpeed += (this.targetSpeed - this.displaySpeed) * Math.min(1, dt * 8.0);
     // Expressive temporal curve around the 0.88 neutral point. Very low values now
@@ -2162,33 +2414,16 @@ ${fragmentLog}`;
     this.timePhase += dt * speedCurve;
     this.uniforms.uTime.value = this.timePhase;
     this.uniforms.uSpeed.value = this.displaySpeed;
+    const rainSpeed=clamp(Math.pow(normalizedSpeed,1.10),0.12,3.0);
+    this.matrixPhase+=dt*rainSpeed*(1+this.uniforms.uTrebleAtt.value*0.08);
+    this.uniforms.uMatrixTime.value=this.matrixPhase;
+    this.evolutionPhase+=dt*(0.025+this.uniforms.uLevelAtt.value*(0.035+this.uniforms.uMidAtt.value*0.09+this.uniforms.uCentroid.value*0.035));
+    this.uniforms.uEvolution.value=this.evolutionPhase;
 
-    // Tree growth integrates musical energy over time instead of merely scaling a static shape.
-    // Sustained spectral energy grows the crown; quiet passages pull the branches back to the trunk.
-    const treeVisible = this.currentPreset === 18 || this.targetPreset === 18 ||
-      (this.transitionActive && (Math.round(this.uniforms.uPresetFrom.value) === 18 || Math.round(this.uniforms.uPresetTo.value) === 18));
-    const treeDrive = clamp(
-      this.uniforms.uBassAtt.value * 0.34 +
-      this.uniforms.uMidAtt.value * 0.56 +
-      this.uniforms.uTrebleAtt.value * 0.94 +
-      this.uniforms.uFlux.value * 0.40 +
-      this.uniforms.uTreblePulse.value * 0.20,
-      0, 1.8
-    );
-    if (treeVisible) {
-      const grow = Math.max(0, treeDrive - 0.16);
-      const retract = Math.max(0, 0.20 - treeDrive);
-      const targetVelocity = grow > 0
-        ? 0.16 + grow * (0.52 + this.randomness * 0.18)
-        : -(0.22 + retract * 1.35);
-      this.treeGrowthVelocity += (targetVelocity - this.treeGrowthVelocity) * Math.min(1, dt * 3.2);
-      this.treeGrowth = clamp(this.treeGrowth + this.treeGrowthVelocity * dt, 0.0, 10.0);
-    } else {
-      // Reset off-screen so every return to the tree begins from a recognisable trunk/crown base.
-      this.treeGrowthVelocity *= Math.max(0, 1 - dt * 4.0);
-      this.treeGrowth += (0.26 - this.treeGrowth) * Math.min(1, dt * 1.8);
-    }
-    this.uniforms.uTreeGrowth.value = this.treeGrowth;
+    // Persistent living-tree simulation: branches remember their path, grow with spectral energy
+    // and retract along that same path when the music releases.
+    this.updateLivingTree(dt);
+    this.renderLivingTreeTexture(dt);
 
     this.updateTransition(now);
 
@@ -2219,22 +2454,10 @@ ${fragmentLog}`;
       this.logoSpinAngle += dt * (8 + this.logoRotation * 22) * (0.65 + this.uniforms.uMidPulse.value * 0.5 + this.uniforms.uLevel.value * 0.2);
     }
 
-    this.uniforms.uBeat.value *= 0.925;
-    this.uniforms.uSubPulse.value *= 0.90;
-    this.uniforms.uBassPulse.value *= 0.91;
-    this.uniforms.uMidPulse.value *= 0.89;
-    this.uniforms.uTreblePulse.value *= 0.87;
-    this.uniforms.uLevelPulse.value *= 0.90;
-    const macroDecay = this.uniforms.uLevel.value < 0.015 ? 0.965 : 0.9995;
-    this.uniforms.uSubAtt.value *= macroDecay;
-    this.uniforms.uBassAtt.value *= macroDecay;
-    this.uniforms.uMidAtt.value *= macroDecay;
-    this.uniforms.uTrebleAtt.value *= macroDecay;
-    this.uniforms.uLevelAtt.value *= macroDecay;
-
     this.updateLogos(this.timePhase);
     this.updateRunes(this.timePhase, dt);
     this.updateFeedbackSettings();
+    this.updateCinematicSettings();
     this.updateWaveform();
 
     if (this.transitionActive) {
@@ -2254,6 +2477,7 @@ ${fragmentLog}`;
       this.sceneSeed = hashNumber((key + 1) * 19.73);
       this.uniforms.uSceneSeed.value = this.sceneSeed;
       this.presetMesh.material = this.failedPresets.has(key) ? this.fallbackMaterial : this.getPresetMaterial(key);
+      this.setTreeRenderVisible(key);
       this.renderer.setRenderTarget(null);
       if (this.renderPass) this.renderPass.scene = this.presetScene;
       if (this.composer) this.composer.render();

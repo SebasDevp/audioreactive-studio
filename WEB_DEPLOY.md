@@ -1,17 +1,6 @@
-# AudioReactive Studio v0.14.1 · Web deploy
+# AudioReactive Studio v0.18.0 · Web deploy
 
-Cloudflare Pages settings:
-- Branch: `main`
-- Build command: `npm run build:web`
-- Build output directory: `dist`
+Build command: `npm run build:web`
+Output directory: `dist`
 
-After replacing the project files:
-
-```powershell
-npm run build:web
-git add .
-git commit -m "AudioReactive Studio v0.14 Living Systems"
-git push origin main
-```
-
-Cloudflare will deploy automatically from `main`.
+The Arcane Living Tree uses only Three.js/WebGL resources already bundled by the project. No CDN dependency or new package is required.

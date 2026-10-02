@@ -1,5 +1,6 @@
 import { AudioEngine } from './audio-engine.js';
 import { platform } from './platform-bridge.js';
+import { MusicalDirector, AUTO_VISUAL_KEYS, AUTO_LOGO_KEYS } from './musical-director.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -42,7 +43,7 @@ async function initializePreview(options = {}) {
           }
         }
       });
-      preview.setState(state);
+      preview.setState(director.compose(state));
     } catch (error) {
       showVisualInitError(error);
       return null;
@@ -66,7 +67,7 @@ async function initializePreview(options = {}) {
         return preview;
       }
 
-      preview.setState(state);
+      preview.setState(director.compose(state));
       const activate = $('activateVisualEngine');
       if (activate) activate.hidden = true;
       setPreviewIdle(audioConnected ? 'AUDIO CONNECTED · WAITING FOR SIGNAL' : 'READY · CONNECT AUDIO TO AWAKEN THE VISUAL ENGINE', true);
@@ -89,6 +90,9 @@ let savedOverlaySettings = {};
 try { savedOverlaySettings = JSON.parse(localStorage.getItem(OVERLAY_SETTINGS_KEY) || '{}') || {}; } catch (_) {}
 
 const state = {
+  autoVisual: false,
+  autoLogo: false,
+  treeGrowth: 0.55,
   sub: 0,
   bass: 0,
   mid: 0,
@@ -101,6 +105,11 @@ const state = {
   intensity: 1.06,
   contrast: 1.08,
   speed: 0.88,
+  spinEnabled: false,
+  spinSpeed: 0.20,
+  viewAngle: 0,
+  viewTilt: 0,
+  perspective: 0,
   zoom: 1,
   density: 1.28,
   bloom: 0.82,
@@ -145,6 +154,8 @@ Object.assign(state, savedOverlaySettings);
 state.logoDataUrl = savedLogo;
 state.logoEnabled = savedLogo ? (savedOverlaySettings.logoEnabled ?? true) : false;
 
+const director = new MusicalDirector();
+let lastAutomationUi = 0;
 let lastBroadcast = 0;
 let captureSources = [];
 let audioConnected = false;
@@ -161,8 +172,9 @@ function broadcast(force = false) {
   const now = performance.now();
   if (!force && now - lastBroadcast < 24) return;
   lastBroadcast = now;
-  preview?.setState(state);
-  const ipcState = { ...state };
+  const effective = director.compose(state);
+  preview?.setState(effective);
+  const ipcState = { ...effective };
   if (!force) delete ipcState.logoDataUrl;
   platform.sendVisualState(ipcState);
 }
@@ -192,11 +204,13 @@ function updateMeters(metrics) {
 }
 
 function updateModuleSummaries() {
+  const effective=director.compose(state);
+  const visualName=$('preset')?.options?.[effective.preset]?.textContent?.replace(' · Vegvísir','') || 'SCENE';
   const summaries = {
     audio: audioConnected ? 'LIVE' : 'READY',
-    visual: $('preset')?.selectedOptions?.[0]?.textContent?.replace(' · Vegvísir','') || 'SCENE',
-    transitions: `${String(state.transitionMode || 'ecosystem').toUpperCase()} ${Number(state.transitionSpeed) > 0 ? '+' : ''}${Number(state.transitionSpeed) || 0}`,
-    overlay: state.logoEnabled && state.logoDataUrl ? `ON · ${state.logoCopies || 1}X` : 'OFF',
+    visual: `${state.autoVisual?'AUTO · ':''}${visualName}`,
+    transitions: state.autoVisual ? `AUTO · ${String(effective.transitionMode || 'ecosystem').toUpperCase()}` : `${String(state.transitionMode || 'ecosystem').toUpperCase()} ${Number(state.transitionSpeed) > 0 ? '+' : ''}${Number(state.transitionSpeed) || 0}`,
+    overlay: state.logoEnabled && state.logoDataUrl ? `${state.autoLogo?'AUTO':'ON'} · ${effective.logoCopies || 1}X` : 'OFF',
     output: platform.isWeb ? 'WEB WINDOW' : 'WINDOW / DISPLAY'
   };
   Object.entries(summaries).forEach(([key,value]) => {
@@ -476,8 +490,13 @@ const bindings = [
   ['intensity', 'intensity', true],
   ['contrast', 'contrast', true],
   ['speed', 'speed', true],
+  ['spinSpeed', 'spinSpeed', true],
+  ['viewAngle', 'viewAngle', true],
+  ['viewTilt', 'viewTilt', true],
+  ['perspective', 'perspective', true],
   ['zoom', 'zoom', true],
   ['density', 'density', true],
+  ['treeGrowth', 'treeGrowth', true],
   ['bloom', 'bloom', true],
   ['randomness', 'randomness', true],
   ['flow', 'flow', true],
@@ -514,11 +533,53 @@ bindings.forEach(([id, key, numeric]) => {
       const decimals = ['logoCopies', 'preset'].includes(id) ? 0 : 2;
       $(`${id}Value`).textContent = Number(event.target.value).toFixed(decimals);
     }
-    if (id === 'quality') $('qualityBadge').textContent = event.target.value === 'ultra' ? 'ULTRA' : event.target.value === 'performance' ? 'PERF' : 'HD';
+    if (id === 'quality') $('qualityBadge').textContent = event.target.value === 'ultra' ? 'ULTRA' : event.target.value === 'performance' ? 'PERF' : event.target.value === 'cinematic' ? 'CINE' : 'HD';
     if (id === 'transitionSpeed' || id === 'transitionMode') updateTransitionUi();
     if (id.startsWith('logo')) persistOverlaySettings();
     broadcast(true);
   });
+});
+
+function updateAutomationUi() {
+  for (const key of AUTO_VISUAL_KEYS) if ($(key)) $(key).disabled=state.autoVisual;
+  $('spinEnabled').disabled=state.autoVisual;
+  $('resetView').disabled=state.autoVisual;
+  for (const key of AUTO_LOGO_KEYS) if ($(key)) $(key).disabled=state.autoLogo;
+  $('logoResetRotation').disabled=state.autoLogo;
+  $('autoLogo').disabled=!state.logoDataUrl;
+  const info=director.status();
+  const listening=audioConnected&&state.level>.035;
+  $('autoVisualStatus').textContent=!state.autoVisual?'Tus ajustes manuales están activos.':
+    !listening?'Esperando música y beats…':`AUTO · ${info.bpm} BPM · ${$('preset').options[info.scene]?.textContent||'Visual'} · pulso ${info.beats}`;
+  $('autoLogoStatus').textContent=!state.autoLogo?'El logo mantiene sus ajustes manuales.':
+    !listening?'Esperando música y beats…':`AUTO LOGO · ${info.bpm} BPM · pulso ${info.beats}`;
+  $('autoVisual').checked=state.autoVisual;
+  $('autoLogo').checked=state.autoLogo;
+  updateModuleSummaries();
+}
+for(const id of ['autoVisual','autoLogo']) $(id).addEventListener('change',(event)=>{
+  state[id]=event.target.checked;
+  director.setEnabled(state.autoVisual,state.autoLogo,state);
+  updateAutomationUi();broadcast(true);
+});
+function automationLoop(now) {
+  director.tick(now,state);
+  if(state.autoVisual||state.autoLogo)broadcast();
+  if(now-lastAutomationUi>250){lastAutomationUi=now;updateAutomationUi();}
+  requestAnimationFrame(automationLoop);
+}
+
+$('spinEnabled').addEventListener('change', (event) => {
+  state.spinEnabled = event.target.checked;
+  broadcast(true);
+});
+$('resetView').addEventListener('click', () => {
+  for (const key of ['viewAngle','viewTilt','perspective']) {
+    state[key] = 0;
+    $(key).value = '0';
+    $(`${key}Value`).textContent = '0.00';
+  }
+  broadcast(true);
 });
 
 $('logoFile').addEventListener('change', async (event) => {
@@ -528,6 +589,7 @@ $('logoFile').addEventListener('change', async (event) => {
   reader.onload = () => {
     state.logoDataUrl = String(reader.result || '');
     state.logoEnabled = true;
+    updateAutomationUi();
     try { localStorage.setItem('ars_logo_data', state.logoDataUrl); } catch (_) {}
     persistOverlaySettings();
     setLogoUi();
@@ -547,6 +609,9 @@ $('logoToggle').addEventListener('click', () => {
 $('clearLogo').addEventListener('click', () => {
   state.logoDataUrl = '';
   state.logoEnabled = false;
+  state.autoLogo = false;
+  director.setEnabled(state.autoVisual,false,state);
+  updateAutomationUi();
   $('logoFile').value = '';
   localStorage.removeItem('ars_logo_data');
   persistOverlaySettings();
@@ -564,7 +629,7 @@ window.addEventListener('keydown', (event) => {
     Q: 10, W: 11, E: 12, R: 13, T: 14, Y: 15, U: 16, I: 17, O: 18, P: 19,
     A: 20, S: 21, D: 22, F: 23
   };
-  if (presetMap[event.key] != null) {
+  if (!state.autoVisual && presetMap[event.key] != null) {
     $('preset').value = String(presetMap[event.key]);
     state.preset = presetMap[event.key];
     $('transitionStatusText').textContent = `TRANSITION · ${$('preset').selectedOptions[0]?.textContent || 'SCENE'}`;
@@ -747,9 +812,9 @@ try {
 }
 
 [
-  'preset','intensity','contrast','speed','zoom','density','bloom','randomness','flow','audioZoom','feedback','memoryWarp','echoZoom','waveformGain','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'
+  'preset','intensity','contrast','speed','spinSpeed','viewAngle','viewTilt','perspective','zoom','density','treeGrowth','bloom','randomness','flow','audioZoom','feedback','memoryWarp','echoZoom','waveformGain','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'
 ].forEach((id) => { if ($(id)) $(id).value = String(state[id]); });
-if ($('quality')) $('quality').value = state.quality;
+if ($('quality')) { $('quality').value = state.quality; $('qualityBadge').textContent = state.quality === 'ultra' ? 'ULTRA' : state.quality === 'performance' ? 'PERF' : state.quality === 'cinematic' ? 'CINE' : 'HD'; }
 if ($('transitionMode')) $('transitionMode').value = state.transitionMode;
 if ($('transitionSync')) $('transitionSync').checked = Boolean(state.transitionSync);
 if ($('adaptiveQuality')) $('adaptiveQuality').checked = Boolean(state.adaptiveQuality);
@@ -759,7 +824,7 @@ if ($('logoColorMode')) $('logoColorMode').value = state.logoColorMode;
 if ($('logoBlendMode')) $('logoBlendMode').value = state.logoBlendMode;
 ['logoFxBlink','logoFxPulse','logoFxSpin','logoFxColor'].forEach((id)=>{ if ($(id)) $(id).checked = Boolean(state[id]); });
 if ($('inputGainValue') && $('inputGain')) $('inputGainValue').textContent = `${Number($('inputGain').value).toFixed(2)}×`;
-['intensity','contrast','speed','zoom','density','bloom','randomness','flow','audioZoom','feedback','memoryWarp','echoZoom','waveformGain','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'].forEach((id)=>{
+['intensity','contrast','speed','spinSpeed','viewAngle','viewTilt','perspective','zoom','density','treeGrowth','bloom','randomness','flow','audioZoom','feedback','memoryWarp','echoZoom','waveformGain','colorMix','transitionSpeed','transitionZoom','logoSize','logoOpacity','logoCopies','logoSpread','logoPosX','logoPosY','logoRotation','logoGlow'].forEach((id)=>{
   if ($(`${id}Value`)) {
     const decimals = ['logoCopies','transitionSpeed'].includes(id) ? 0 : 2;
     $(`${id}Value`).textContent = Number(state[id]).toFixed(decimals);
@@ -768,6 +833,8 @@ if ($('inputGainValue') && $('inputGain')) $('inputGainValue').textContent = `${
 setLogoUi();
 updateTransitionUi();
 updateModuleSummaries();
+updateAutomationUi();
+requestAnimationFrame(automationLoop);
 setPreviewIdle('UI READY · PREPARING GPU IN BACKGROUND…', true);
 
 // Release the branded intro quickly. The heavy visual engine is intentionally NOT on the critical path.
@@ -818,4 +885,3 @@ $('activateVisualEngine')?.addEventListener('click', async () => {
 
 // Initial state can safely broadcast before/after the renderer exists.
 broadcast(true);
-

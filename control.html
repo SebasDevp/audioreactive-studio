@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AudioReactive Studio · Control v0.14.1</title>
+    <title>AudioReactive Studio · Control v0.19.0</title>
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body class="control-body">
@@ -21,7 +21,7 @@
         <div class="brand-wrap">
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <div>
-            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.14.1</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
+            <div class="eyebrow">LIVE VISUAL INSTRUMENT <span class="version">v0.19.0</span> <span id="platformBadge" class="platform-badge">DESKTOP</span></div>
             <h1>AudioReactive <strong>Studio</strong></h1>
           </div>
         </div>
@@ -97,6 +97,11 @@
 
           <section class="control-section" data-module="visual">
             <div class="section-heading"><div><span class="section-index">02</span><span class="section-title">VISUAL ENGINE</span></div></div>
+            <div class="auto-director-card">
+              <label class="auto-switch"><input id="autoVisual" type="checkbox" /><span><strong>AUTO · RANDOMIZACIÓN MUSICAL</strong><small>La música dirige las visuales, la cámara y las transiciones.</small></span></label>
+              <p id="autoVisualStatus" class="auto-status" aria-live="polite">Tus ajustes manuales están activos.</p>
+              <small class="auto-note">Al apagar, recuperás tus ajustes. El logo se controla por separado.</small>
+            </div>
             <label>Plantilla</label>
             <select id="preset" class="visual-select">
               <option value="0">Cosmic Particles</option>
@@ -117,7 +122,7 @@
               <option value="15">Merkaba Prism</option>
               <option value="16">Liquid Resonance</option>
               <option value="17">Galactic Bloom</option>
-              <option value="18">Tree of Life · Living Tendrils</option>
+              <option value="18">Tree of Life · Arcane Living Tree</option>
               <option value="19">Aurora Veil</option>
               <option value="20">Feedback Cathedral</option>
               <option value="21">Mycelium Network</option>
@@ -128,8 +133,18 @@
             <div class="slider-control"><label><span>Intensidad</span><b id="intensityValue">1.06</b></label><input id="intensity" type="range" min="0" max="2.5" value="1.06" step="0.01" /></div>
             <div class="slider-control"><label><span>Contraste</span><b id="contrastValue">1.08</b></label><input id="contrast" type="range" min="0.65" max="2" value="1.08" step="0.01" /></div>
             <div class="slider-control"><label><span>Velocidad temporal</span><b id="speedValue">0.88</b></label><input id="speed" type="range" min="0.02" max="3" value="0.88" step="0.01" /></div>
+            <div class="engine-personality view-controls">
+              <div class="engine-personality-head"><strong>MOVIMIENTO / PERSPECTIVA</strong><small>Giro independiente y suave. En Matrix, la lluvia conserva su caída vertical.</small></div>
+              <label class="check-row"><input id="spinEnabled" type="checkbox" /><span>Activar giro</span></label>
+              <div class="slider-control"><label><span>Velocidad de giro · vueltas/min</span><b id="spinSpeedValue">0.20</b></label><input id="spinSpeed" type="range" min="0" max="1" value="0.20" step="0.01" /></div>
+              <div class="slider-control"><label><span>Ángulo de vista</span><b id="viewAngleValue">0.00</b></label><input id="viewAngle" type="range" min="-45" max="45" value="0" step="1" /></div>
+              <div class="slider-control"><label><span>Inclinación</span><b id="viewTiltValue">0.00</b></label><input id="viewTilt" type="range" min="-35" max="35" value="0" step="1" /></div>
+              <div class="slider-control"><label><span>Profundidad / perspectiva</span><b id="perspectiveValue">0.00</b></label><input id="perspective" type="range" min="0" max="1" value="0" step="0.01" /></div>
+              <button id="resetView" type="button" class="tiny-btn">Centrar cámara</button>
+            </div>
             <div class="slider-control"><label><span>Zoom</span><b id="zoomValue">1.00</b></label><input id="zoom" type="range" min="0.35" max="2.5" value="1" step="0.01" /></div>
-            <div class="slider-control"><label><span>Partículas / densidad</span><b id="densityValue">1.28</b></label><input id="density" type="range" min="0.2" max="3" value="1.28" step="0.01" /></div>
+            <div class="slider-control"><label><span>Partículas / densidad</span><b id="densityValue">1.28</b></label><input id="density" type="range" min="0" max="3" value="1.28" step="0.01" /></div>
+            <div class="slider-control"><label><span>Crecimiento del árbol</span><b id="treeGrowthValue">0.55</b></label><input id="treeGrowth" type="range" min="0" max="1" value="0.55" step="0.01" /></div>
             <div class="slider-control"><label><span>Bloom / glow</span><b id="bloomValue">0.82</b></label><input id="bloom" type="range" min="0" max="1.65" value="0.82" step="0.01" /></div>
             <div class="engine-personality">
               <div class="engine-personality-head"><strong>PERSONALITY ENGINE</strong><small>0 = estable · 1 = mutación generativa intensa, siempre interpolada y musical.</small></div>
@@ -164,6 +179,7 @@
             <label class="quality-label">Calidad de render</label>
             <select id="quality">
               <option value="performance">Performance</option>
+              <option value="cinematic">Cinematic / Soft Stage</option>
               <option value="high" selected>HD / Adaptativa</option>
               <option value="ultra">Ultra / Supersampling</option>
             </select>
@@ -208,6 +224,11 @@
                 <button id="clearLogo">Borrar logo</button>
               </div>
 
+              <div class="auto-director-card auto-logo-card">
+                <label class="auto-switch"><input id="autoLogo" type="checkbox" disabled /><span><strong>AUTO · LOGO AL BEAT</strong><small>Composición, tamaño, color y movimiento independientes.</small></span></label>
+                <p id="autoLogoStatus" class="auto-status" aria-live="polite">El logo mantiene sus ajustes manuales.</p>
+                <small class="auto-note">Al apagar, recuperás los ajustes y la orientación del logo.</small>
+              </div>
               <div class="slider-control"><label><span>Tamaño del logo</span><b id="logoSizeValue">0.28</b></label><input id="logoSize" type="range" min="0.10" max="0.65" value="0.28" step="0.01" /></div>
               <div class="slider-control"><label><span>Opacidad del logo</span><b id="logoOpacityValue">0.85</b></label><input id="logoOpacity" type="range" min="0.05" max="1" value="0.85" step="0.01" /></div>
               <div class="slider-control"><label><span>Cantidad / copias</span><b id="logoCopiesValue">1</b></label><input id="logoCopies" type="range" min="1" max="12" value="1" step="1" /></div>
@@ -309,7 +330,7 @@
               <strong>SEBASDEVP · GENERATIVE ECOSYSTEM</strong>
             </div>
           </div>
-          <div class="hint">v0.14.1 · STABLE LIVING ENGINE: 24 mundos, árbol vivo y compatibilidad GPU automática.</div>
+          <div class="hint">v0.19.0 · MUSICAL AUTOPILOT: visuales generativas al beat, logo independiente y crecimiento orgánico.</div>
         </section>
       </section>
     </main>
